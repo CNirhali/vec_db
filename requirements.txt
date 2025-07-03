@@ -1,0 +1,9 @@
+numpy
+hnswlib
+pandas
+matplotlib
+h5py
+fastapi
+uvicorn
+prometheus_client
+structlog 

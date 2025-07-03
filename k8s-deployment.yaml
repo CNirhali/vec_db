@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vectordb
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vectordb
+  template:
+    metadata:
+      labels:
+        app: vectordb
+    spec:
+      containers:
+      - name: vectordb
+        image: <your-docker-image>
+        ports:
+        - containerPort: 8000
+        env:
+        - name: API_KEY
+          value: "supersecretkey"
+        volumeMounts:
+        - name: vectordb-data
+          mountPath: /app/data
+      volumes:
+      - name: vectordb-data
+        persistentVolumeClaim:
+          claimName: vectordb-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vectordb-service
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 8000
+    targetPort: 8000
+  selector:
+    app: vectordb 

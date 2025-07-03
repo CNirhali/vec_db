@@ -1,0 +1,28 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "VectorDB API Monitoring",
+    "panels": [
+      {
+        "type": "graph",
+        "title": "API Request Count",
+        "targets": [
+          {"expr": "sum(rate(vectordb_requests_total[1m])) by (endpoint)", "legendFormat": "{{endpoint}}"}
+        ],
+        "datasource": "Prometheus",
+        "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8}
+      },
+      {
+        "type": "graph",
+        "title": "API Request Latency (p95)",
+        "targets": [
+          {"expr": "histogram_quantile(0.95, sum(rate(vectordb_request_latency_seconds_bucket[1m])) by (le, endpoint))", "legendFormat": "{{endpoint}}"}
+        ],
+        "datasource": "Prometheus",
+        "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8}
+      }
+    ],
+    "schemaVersion": 30,
+    "version": 1
+  }
+} 
