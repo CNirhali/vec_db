@@ -1,8 +1,13 @@
 from fastapi import FastAPI, HTTPException, Header, Depends
 from fastapi.concurrency import run_in_threadpool
+from pydantic import BaseModel, field_validator
 from pydantic import BaseModel
 from typing import List, Optional
 import numpy as np
+import os
+import secrets
+import functools
+import inspect
 from .core import VectorDB
 import structlog
 from prometheus_client import Counter, Histogram, generate_latest
@@ -33,6 +38,13 @@ class InitRequest(BaseModel):
     ef_construction: int = 400
     M: int = 32
     ef_search: int = 128
+
+    @field_validator('storage_path')
+    @classmethod
+    def validate_storage_path(cls, v: str) -> str:
+        if ".." in v or v.startswith("/") or v.startswith("\\"):
+            raise ValueError("storage_path must be a relative path and cannot contain '..'")
+        return v
 
 class AddRequest(BaseModel):
     vectors: List[List[float]]
@@ -119,4 +131,4 @@ def update_vectors(req: UpdateRequest, x_api_key: str = Depends(api_key_auth)):
 @app.get("/status")
 @instrument("/status")
 def status():
-    return {"status": "ok", "db_initialized": db is not None} 
+    return {"status": "ok", "db_initialized": db is not None}
