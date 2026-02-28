@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException, Header, Depends
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 from typing import List, Optional
 import numpy as np
@@ -6,10 +7,15 @@ from .core import VectorDB
 import structlog
 from prometheus_client import Counter, Histogram, generate_latest
 from fastapi.responses import Response
+import os
+import secrets
+import functools
+import inspect
 
 app = FastAPI()
 db = None
-API_KEY = "supersecretkey"
+# Security: Load API Key from environment variable, default for dev
+API_KEY = os.getenv("API_KEY", "supersecretkey")
 
 logger = structlog.get_logger()
 
@@ -17,7 +23,8 @@ REQUEST_COUNT = Counter('vectordb_requests_total', 'Total API requests', ['endpo
 REQUEST_LATENCY = Histogram('vectordb_request_latency_seconds', 'API request latency', ['endpoint', 'method'])
 
 def api_key_auth(x_api_key: str = Header(...)):
-    if x_api_key != API_KEY:
+    # Security: Use compare_digest to prevent timing attacks
+    if not secrets.compare_digest(x_api_key, API_KEY):
         raise HTTPException(status_code=401, detail="Invalid API Key")
 
 class InitRequest(BaseModel):
@@ -50,12 +57,17 @@ def metrics():
 
 def instrument(endpoint):
     def decorator(func):
+        @functools.wraps(func)
         async def wrapper(*args, **kwargs):
             method = func.__name__
             REQUEST_COUNT.labels(endpoint, method).inc()
             with REQUEST_LATENCY.labels(endpoint, method).time():
                 logger.info("api_call", endpoint=endpoint, method=method)
-                return await func(*args, **kwargs)
+                # Correctly handle both sync and async endpoints
+                if inspect.iscoroutinefunction(func):
+                    return await func(*args, **kwargs)
+                else:
+                    return await run_in_threadpool(func, *args, **kwargs)
         return wrapper
     return decorator
 
@@ -63,6 +75,9 @@ def instrument(endpoint):
 @instrument("/init")
 def init_db(req: InitRequest, x_api_key: str = Depends(api_key_auth)):
     global db
+    # Security: Prevent path traversal
+    if ".." in req.storage_path or req.storage_path.startswith("/") or req.storage_path.startswith("\\"):
+        raise HTTPException(status_code=400, detail="Invalid storage path")
     db = VectorDB(req.dim, req.storage_path, ef_construction=req.ef_construction, M=req.M, ef_search=req.ef_search)
     return {"status": "initialized", "dim": req.dim, "storage_path": req.storage_path, "ef_construction": req.ef_construction, "M": req.M, "ef_search": req.ef_search}
 
