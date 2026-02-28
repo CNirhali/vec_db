@@ -1,10 +1,12 @@
 from fastapi import FastAPI, HTTPException, Header, Depends
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, field_validator
 from typing import List, Optional
 import numpy as np
 import os
 import secrets
-from functools import wraps
+import functools
+import inspect
 from .core import VectorDB
 import structlog
 from prometheus_client import Counter, Histogram, generate_latest
@@ -12,6 +14,7 @@ from fastapi.responses import Response
 
 app = FastAPI()
 db = None
+# Security: Load API Key from environment variable, default for dev
 API_KEY = os.getenv("API_KEY", "supersecretkey")
 
 logger = structlog.get_logger()
@@ -20,6 +23,7 @@ REQUEST_COUNT = Counter('vectordb_requests_total', 'Total API requests', ['endpo
 REQUEST_LATENCY = Histogram('vectordb_request_latency_seconds', 'API request latency', ['endpoint', 'method'])
 
 def api_key_auth(x_api_key: str = Header(...)):
+    # Security: Use compare_digest to prevent timing attacks
     if not secrets.compare_digest(x_api_key, API_KEY):
         raise HTTPException(status_code=401, detail="Invalid API Key")
 
@@ -60,13 +64,17 @@ def metrics():
 
 def instrument(endpoint):
     def decorator(func):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
+        @functools.wraps(func)
+        async def wrapper(*args, **kwargs):
             method = func.__name__
             REQUEST_COUNT.labels(endpoint, method).inc()
             with REQUEST_LATENCY.labels(endpoint, method).time():
                 logger.info("api_call", endpoint=endpoint, method=method)
-                return func(*args, **kwargs)
+                # Correctly handle both sync and async endpoints
+                if inspect.iscoroutinefunction(func):
+                    return await func(*args, **kwargs)
+                else:
+                    return await run_in_threadpool(func, *args, **kwargs)
         return wrapper
     return decorator
 
@@ -115,4 +123,4 @@ def update_vectors(req: UpdateRequest, x_api_key: str = Depends(api_key_auth)):
 @app.get("/status")
 @instrument("/status")
 def status():
-    return {"status": "ok", "db_initialized": db is not None} 
+    return {"status": "ok", "db_initialized": db is not None}
