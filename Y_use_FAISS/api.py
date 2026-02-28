@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException, Header, Depends
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, field_validator
+from pydantic import BaseModel
 from typing import List, Optional
 import numpy as np
 import os
@@ -11,6 +12,10 @@ from .core import VectorDB
 import structlog
 from prometheus_client import Counter, Histogram, generate_latest
 from fastapi.responses import Response
+import os
+import secrets
+import functools
+import inspect
 
 app = FastAPI()
 db = None
@@ -82,6 +87,9 @@ def instrument(endpoint):
 @instrument("/init")
 def init_db(req: InitRequest, x_api_key: str = Depends(api_key_auth)):
     global db
+    # Security: Prevent path traversal
+    if ".." in req.storage_path or req.storage_path.startswith("/") or req.storage_path.startswith("\\"):
+        raise HTTPException(status_code=400, detail="Invalid storage path")
     db = VectorDB(req.dim, req.storage_path, ef_construction=req.ef_construction, M=req.M, ef_search=req.ef_search)
     return {"status": "initialized", "dim": req.dim, "storage_path": req.storage_path, "ef_construction": req.ef_construction, "M": req.M, "ef_search": req.ef_search}
 
