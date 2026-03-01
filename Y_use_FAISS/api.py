@@ -1,8 +1,7 @@
 from fastapi import FastAPI, HTTPException, Header, Depends
 from fastapi.concurrency import run_in_threadpool
-from pydantic import BaseModel, field_validator
-from pydantic import BaseModel
-from typing import List, Optional
+from pydantic import BaseModel, field_validator, Field, model_validator
+from typing import List, Optional, Any
 import numpy as np
 import os
 import secrets
@@ -33,35 +32,51 @@ def api_key_auth(x_api_key: str = Header(...)):
         raise HTTPException(status_code=401, detail="Invalid API Key")
 
 class InitRequest(BaseModel):
-    dim: int
+    dim: int = Field(..., gt=0)
     storage_path: str
-    ef_construction: int = 400
-    M: int = 32
-    ef_search: int = 128
+    ef_construction: int = Field(400, gt=0)
+    M: int = Field(32, gt=0)
+    ef_search: int = Field(128, gt=0)
 
     @field_validator('storage_path')
     @classmethod
     def validate_storage_path(cls, v: str) -> str:
+        # Security: Prevent path traversal
         if ".." in v or v.startswith("/") or v.startswith("\\"):
             raise ValueError("storage_path must be a relative path and cannot contain '..'")
         return v
 
 class AddRequest(BaseModel):
-    vectors: List[List[float]]
+    vectors: List[List[float]] = Field(..., min_length=1)
     ids: Optional[List[int]] = None
     metadata: Optional[List[dict]] = None
 
+    @model_validator(mode='after')
+    def validate_lengths(self) -> 'AddRequest':
+        n_vectors = len(self.vectors)
+        if self.ids is not None and len(self.ids) != n_vectors:
+            raise ValueError(f"Number of ids ({len(self.ids)}) must match number of vectors ({n_vectors})")
+        if self.metadata is not None and len(self.metadata) != n_vectors:
+            raise ValueError(f"Number of metadata entries ({len(self.metadata)}) must match number of vectors ({n_vectors})")
+        return self
+
 class SearchRequest(BaseModel):
-    queries: List[List[float]]
-    k: int = 10
+    queries: List[List[float]] = Field(..., min_length=1)
+    k: int = Field(10, gt=0)
     filter_metadata: Optional[dict] = None
 
 class DeleteRequest(BaseModel):
     ids: List[int]
 
 class UpdateRequest(BaseModel):
-    ids: List[int]
-    vectors: List[List[float]]
+    ids: List[int] = Field(..., min_length=1)
+    vectors: List[List[float]] = Field(..., min_length=1)
+
+    @model_validator(mode='after')
+    def validate_lengths(self) -> 'UpdateRequest':
+        if len(self.ids) != len(self.vectors):
+            raise ValueError(f"Number of ids ({len(self.ids)}) must match number of vectors ({len(self.vectors)})")
+        return self
 
 @app.get("/metrics")
 def metrics():
@@ -99,6 +114,9 @@ def add_vectors(req: AddRequest, x_api_key: str = Depends(api_key_auth)):
     if db is None:
         raise HTTPException(status_code=400, detail="DB not initialized")
     vectors = np.array(req.vectors, dtype=np.float32)
+    # Security: Validate vector dimensions
+    if vectors.shape[1] != db.dim:
+        raise HTTPException(status_code=400, detail=f"Invalid vector dimension. Expected {db.dim}, got {vectors.shape[1]}")
     db.add(vectors, req.ids, req.metadata)
     return {"status": "ok", "count": len(vectors)}
 
@@ -108,8 +126,12 @@ def search_vectors(req: SearchRequest, x_api_key: str = Depends(api_key_auth)):
     if db is None:
         raise HTTPException(status_code=400, detail="DB not initialized")
     queries = np.array(req.queries, dtype=np.float32)
+    # Security: Validate query dimensions
+    if queries.shape[1] != db.dim:
+        raise HTTPException(status_code=400, detail=f"Invalid query dimension. Expected {db.dim}, got {queries.shape[1]}")
     labels, distances = db.search(queries, req.k, filter_metadata=req.filter_metadata)
-    return {"labels": labels, "distances": distances}
+    # Convert numpy types to native Python types for JSON serialization
+    return {"labels": labels.tolist(), "distances": distances.tolist()}
 
 @app.post("/delete")
 @instrument("/delete")
@@ -125,6 +147,9 @@ def update_vectors(req: UpdateRequest, x_api_key: str = Depends(api_key_auth)):
     if db is None:
         raise HTTPException(status_code=400, detail="DB not initialized")
     vectors = np.array(req.vectors, dtype=np.float32)
+    # Security: Validate vector dimensions
+    if vectors.shape[1] != db.dim:
+        raise HTTPException(status_code=400, detail=f"Invalid vector dimension. Expected {db.dim}, got {vectors.shape[1]}")
     db.update(req.ids, vectors)
     return {"status": "ok", "updated": len(req.ids)}
 
