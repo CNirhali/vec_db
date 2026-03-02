@@ -11,10 +11,6 @@ from .core import VectorDB
 import structlog
 from prometheus_client import Counter, Histogram, generate_latest
 from fastapi.responses import Response
-import os
-import secrets
-import functools
-import inspect
 
 app = FastAPI()
 db = None
@@ -22,6 +18,9 @@ db = None
 API_KEY = os.getenv("API_KEY", "supersecretkey")
 
 logger = structlog.get_logger()
+
+if API_KEY == "supersecretkey":
+    logger.warning("Using default insecure API_KEY. Please set API_KEY environment variable in production.")
 
 REQUEST_COUNT = Counter('vectordb_requests_total', 'Total API requests', ['endpoint', 'method'])
 REQUEST_LATENCY = Histogram('vectordb_request_latency_seconds', 'API request latency', ['endpoint', 'method'])
@@ -42,7 +41,7 @@ class InitRequest(BaseModel):
     @classmethod
     def validate_storage_path(cls, v: str) -> str:
         # Security: Prevent path traversal
-        if ".." in v or v.startswith("/") or v.startswith("\\"):
+        if ".." in v or os.path.isabs(v) or v.startswith("/") or v.startswith("\\"):
             raise ValueError("storage_path must be a relative path and cannot contain '..'")
         return v
 
@@ -62,7 +61,7 @@ class AddRequest(BaseModel):
 
 class SearchRequest(BaseModel):
     queries: List[List[float]] = Field(..., min_length=1)
-    k: int = Field(10, gt=0)
+    k: int = Field(10, gt=0, le=1000)  # Security: Limit k to prevent DoS
     filter_metadata: Optional[dict] = None
 
 class DeleteRequest(BaseModel):
@@ -79,7 +78,7 @@ class UpdateRequest(BaseModel):
         return self
 
 @app.get("/metrics")
-def metrics():
+def metrics(x_api_key: str = Depends(api_key_auth)):
     return Response(generate_latest(), media_type="text/plain")
 
 def instrument(endpoint):
@@ -102,9 +101,6 @@ def instrument(endpoint):
 @instrument("/init")
 def init_db(req: InitRequest, x_api_key: str = Depends(api_key_auth)):
     global db
-    # Security: Prevent path traversal
-    if ".." in req.storage_path or req.storage_path.startswith("/") or req.storage_path.startswith("\\"):
-        raise HTTPException(status_code=400, detail="Invalid storage path")
     db = VectorDB(req.dim, req.storage_path, ef_construction=req.ef_construction, M=req.M, ef_search=req.ef_search)
     return {"status": "initialized", "dim": req.dim, "storage_path": req.storage_path, "ef_construction": req.ef_construction, "M": req.M, "ef_search": req.ef_search}
 
@@ -155,5 +151,5 @@ def update_vectors(req: UpdateRequest, x_api_key: str = Depends(api_key_auth)):
 
 @app.get("/status")
 @instrument("/status")
-def status():
+def status(x_api_key: str = Depends(api_key_auth)):
     return {"status": "ok", "db_initialized": db is not None}

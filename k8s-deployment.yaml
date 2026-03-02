@@ -19,7 +19,10 @@ spec:
         - containerPort: 8000
         env:
         - name: API_KEY
-          value: "supersecretkey"
+          valueFrom:
+            secretKeyRef:
+              name: vectordb-secret
+              key: api-key
         volumeMounts:
         - name: vectordb-data
           mountPath: /app/data
