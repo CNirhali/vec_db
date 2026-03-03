@@ -31,7 +31,7 @@ def api_key_auth(x_api_key: str = Header(...)):
         raise HTTPException(status_code=401, detail="Invalid API Key")
 
 class InitRequest(BaseModel):
-    dim: int = Field(..., gt=0)
+    dim: int = Field(..., gt=0, le=10000)  # Security: Limit dimension to prevent excessive memory usage
     storage_path: str
     ef_construction: int = Field(400, gt=0)
     M: int = Field(32, gt=0)
@@ -46,8 +46,8 @@ class InitRequest(BaseModel):
         return v
 
 class AddRequest(BaseModel):
-    vectors: List[List[float]] = Field(..., min_length=1)
-    ids: Optional[List[int]] = None
+    vectors: List[List[float]] = Field(..., min_length=1, max_length=10000)  # Security: Batch size limit to prevent DoS
+    ids: Optional[List[int]] = Field(None, max_length=10000)
     metadata: Optional[List[dict]] = None
 
     @model_validator(mode='after')
@@ -60,16 +60,16 @@ class AddRequest(BaseModel):
         return self
 
 class SearchRequest(BaseModel):
-    queries: List[List[float]] = Field(..., min_length=1)
+    queries: List[List[float]] = Field(..., min_length=1, max_length=10000)  # Security: Batch size limit
     k: int = Field(10, gt=0, le=1000)  # Security: Limit k to prevent DoS
     filter_metadata: Optional[dict] = None
 
 class DeleteRequest(BaseModel):
-    ids: List[int]
+    ids: List[int] = Field(..., max_length=10000)  # Security: Batch size limit
 
 class UpdateRequest(BaseModel):
-    ids: List[int] = Field(..., min_length=1)
-    vectors: List[List[float]] = Field(..., min_length=1)
+    ids: List[int] = Field(..., min_length=1, max_length=10000)  # Security: Batch size limit
+    vectors: List[List[float]] = Field(..., min_length=1, max_length=10000)
 
     @model_validator(mode='after')
     def validate_lengths(self) -> 'UpdateRequest':
