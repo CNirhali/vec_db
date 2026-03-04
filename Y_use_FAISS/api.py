@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Header, Depends
+from fastapi import FastAPI, HTTPException, Header, Depends, Request
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, field_validator, Field, model_validator
 from typing import List, Optional, Any
@@ -14,6 +14,17 @@ from fastapi.responses import Response
 
 app = FastAPI()
 db = None
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    # Security: Defense-in-depth by adding security headers
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self'; object-src 'none';"
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    return response
 # Security: Load API Key from environment variable, default for dev
 API_KEY = os.getenv("API_KEY", "supersecretkey")
 
@@ -109,7 +120,11 @@ def init_db(req: InitRequest, x_api_key: str = Depends(api_key_auth)):
 def add_vectors(req: AddRequest, x_api_key: str = Depends(api_key_auth)):
     if db is None:
         raise HTTPException(status_code=400, detail="DB not initialized")
-    vectors = np.array(req.vectors, dtype=np.float32)
+    try:
+        vectors = np.array(req.vectors, dtype=np.float32)
+    except ValueError as e:
+        # Security: Return 400 instead of 500 when input vectors are inhomogeneous
+        raise HTTPException(status_code=400, detail=f"Invalid input vectors. Ensure all vectors have the same dimension. Error: {str(e)}")
     # Security: Validate vector dimensions
     if vectors.shape[1] != db.dim:
         raise HTTPException(status_code=400, detail=f"Invalid vector dimension. Expected {db.dim}, got {vectors.shape[1]}")
@@ -121,7 +136,11 @@ def add_vectors(req: AddRequest, x_api_key: str = Depends(api_key_auth)):
 def search_vectors(req: SearchRequest, x_api_key: str = Depends(api_key_auth)):
     if db is None:
         raise HTTPException(status_code=400, detail="DB not initialized")
-    queries = np.array(req.queries, dtype=np.float32)
+    try:
+        queries = np.array(req.queries, dtype=np.float32)
+    except ValueError as e:
+        # Security: Return 400 instead of 500 when queries are inhomogeneous
+        raise HTTPException(status_code=400, detail=f"Invalid queries. Ensure all queries have the same dimension. Error: {str(e)}")
     # Security: Validate query dimensions
     if queries.shape[1] != db.dim:
         raise HTTPException(status_code=400, detail=f"Invalid query dimension. Expected {db.dim}, got {queries.shape[1]}")
@@ -142,7 +161,11 @@ def delete_vectors(req: DeleteRequest, x_api_key: str = Depends(api_key_auth)):
 def update_vectors(req: UpdateRequest, x_api_key: str = Depends(api_key_auth)):
     if db is None:
         raise HTTPException(status_code=400, detail="DB not initialized")
-    vectors = np.array(req.vectors, dtype=np.float32)
+    try:
+        vectors = np.array(req.vectors, dtype=np.float32)
+    except ValueError as e:
+        # Security: Return 400 instead of 500 when input vectors are inhomogeneous
+        raise HTTPException(status_code=400, detail=f"Invalid input vectors. Ensure all vectors have the same dimension. Error: {str(e)}")
     # Security: Validate vector dimensions
     if vectors.shape[1] != db.dim:
         raise HTTPException(status_code=400, detail=f"Invalid vector dimension. Expected {db.dim}, got {vectors.shape[1]}")
