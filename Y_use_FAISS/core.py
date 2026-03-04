@@ -23,18 +23,26 @@ class VectorDB:
         if filter_metadata is not None:
             # Load all metadata and filter results
             _, all_ids, all_metadata = self.storage.load_vectors()
-            id_to_meta = {int(i): m for i, m in zip(all_ids, all_metadata)}
+            if all_metadata is None or all_ids is None:
+                id_to_meta = {}
+            else:
+                id_to_meta = {int(i): m for i, m in zip(all_ids, all_metadata)}
+
             filtered_labels = []
             filtered_distances = []
             for i, row in enumerate(labels):
-                filtered = [(l, distances[i][j]) for j, l in enumerate(row) if id_to_meta.get(int(l), {}) == filter_metadata or (filter_metadata.items() <= id_to_meta.get(int(l), {}).items())]
+                # Security: metadata filtering with support for exact match or subset match
+                filtered = [(l, distances[i][j]) for j, l in enumerate(row)
+                            if id_to_meta.get(int(l), {}) == filter_metadata or
+                            (isinstance(id_to_meta.get(int(l)), dict) and filter_metadata.items() <= id_to_meta.get(int(l), {}).items())]
                 if filtered:
-                    filtered_labels.append([l for l, _ in filtered])
-                    filtered_distances.append([d for _, d in filtered])
+                    filtered_labels.append([int(l) for l, _ in filtered])
+                    filtered_distances.append([float(d) for _, d in filtered])
                 else:
                     filtered_labels.append([])
                     filtered_distances.append([])
-            return filtered_labels, filtered_distances
+            # Return as numpy arrays for consistency with index.search results
+            return np.array(filtered_labels, dtype=object), np.array(filtered_distances, dtype=object)
         return labels, distances
 
     def save(self):
