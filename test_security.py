@@ -93,10 +93,26 @@ def test_dos_protection_limits():
     print(f"Update with 10001 vectors: {response.status_code}")
     assert response.status_code == 422
 
+def test_dos_hnsw_parameters():
+    headers = {"X-API-Key": API_KEY}
+
+    # Test ef_construction limit (1,000)
+    data = {"dim": 128, "storage_path": "test_ef.h5", "ef_construction": 1001}
+    response = requests.post(f"{BASE_URL}/init", json=data, headers=headers)
+    print(f"Init with ef_construction=1001: {response.status_code}")
+    assert response.status_code == 422
+
+    # Test M limit (128)
+    data = {"dim": 128, "storage_path": "test_m.h5", "M": 129}
+    response = requests.post(f"{BASE_URL}/init", json=data, headers=headers)
+    print(f"Init with M=129: {response.status_code}")
+    assert response.status_code == 422
+
 if __name__ == "__main__":
     test_metrics_protected()
     test_status_protected()
     test_path_traversal()
     test_dos_k_parameter()
     test_dos_protection_limits()
+    test_dos_hnsw_parameters()
     print("ALL TESTS PASSED")

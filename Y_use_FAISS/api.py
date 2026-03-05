@@ -44,8 +44,8 @@ def api_key_auth(x_api_key: str = Header(...)):
 class InitRequest(BaseModel):
     dim: int = Field(..., gt=0, le=10000)  # Security: Limit dimension to prevent excessive memory usage
     storage_path: str
-    ef_construction: int = Field(400, gt=0)
-    M: int = Field(32, gt=0)
+    ef_construction: int = Field(400, gt=0, le=1000)  # Security: Limit ef_construction to prevent DoS
+    M: int = Field(32, gt=0, le=128)  # Security: Limit M to prevent DoS
     ef_search: int = Field(128, gt=0)
 
     @field_validator('storage_path')
