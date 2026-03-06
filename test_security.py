@@ -7,7 +7,7 @@ API_KEY = "supersecretkey"
 def test_metrics_protected():
     response = requests.get(f"{BASE_URL}/metrics")
     print(f"/metrics status (no key): {response.status_code}")
-    assert response.status_code == 422
+    assert response.status_code == 401
 
     response = requests.get(f"{BASE_URL}/metrics", headers={"X-API-Key": API_KEY})
     print(f"/metrics status (with key): {response.status_code}")
@@ -16,7 +16,7 @@ def test_metrics_protected():
 def test_status_protected():
     response = requests.get(f"{BASE_URL}/status")
     print(f"/status status (no key): {response.status_code}")
-    assert response.status_code == 422
+    assert response.status_code == 401
 
     response = requests.get(f"{BASE_URL}/status", headers={"X-API-Key": API_KEY})
     print(f"/status status (with key): {response.status_code}")

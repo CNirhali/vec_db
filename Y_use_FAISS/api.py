@@ -24,6 +24,8 @@ async def add_security_headers(request: Request, call_next):
     response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self'; object-src 'none';"
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["X-Permitted-Cross-Domain-Policies"] = "none"
     return response
 # Security: Load API Key from environment variable, default for dev
 API_KEY = os.getenv("API_KEY", "supersecretkey")
@@ -36,10 +38,10 @@ if API_KEY == "supersecretkey":
 REQUEST_COUNT = Counter('vectordb_requests_total', 'Total API requests', ['endpoint', 'method'])
 REQUEST_LATENCY = Histogram('vectordb_request_latency_seconds', 'API request latency', ['endpoint', 'method'])
 
-def api_key_auth(x_api_key: str = Header(...)):
-    # Security: Use compare_digest to prevent timing attacks
-    if not secrets.compare_digest(x_api_key, API_KEY):
-        raise HTTPException(status_code=401, detail="Invalid API Key")
+def api_key_auth(x_api_key: Optional[str] = Header(None)):
+    # Security: Return 401 instead of 422 if key is missing, and use compare_digest to prevent timing attacks
+    if x_api_key is None or not secrets.compare_digest(x_api_key, API_KEY):
+        raise HTTPException(status_code=401, detail="Invalid or missing API Key")
 
 class InitRequest(BaseModel):
     dim: int = Field(..., gt=0, le=10000)  # Security: Limit dimension to prevent excessive memory usage
