@@ -108,6 +108,38 @@ def test_dos_hnsw_parameters():
     print(f"Init with M=129: {response.status_code}")
     assert response.status_code == 422
 
+def test_new_security_protections():
+    headers = {"X-API-Key": API_KEY}
+
+    # Test ef_search limit (1,000)
+    data = {"dim": 128, "storage_path": "test_efs.h5", "ef_search": 1001}
+    response = requests.post(f"{BASE_URL}/init", json=data, headers=headers)
+    print(f"Init with ef_search=1001: {response.status_code}")
+    assert response.status_code == 422
+
+    # Test storage_path extension
+    data = {"dim": 128, "storage_path": "test_no_ext"}
+    response = requests.post(f"{BASE_URL}/init", json=data, headers=headers)
+    print(f"Init with test_no_ext: {response.status_code}")
+    assert response.status_code == 422
+    assert "storage_path must have a .h5 or .hdf5 extension" in response.text
+
+    # Test vector dimension limit (10,000)
+    # Init first
+    requests.post(f"{BASE_URL}/init", json={"dim": 128, "storage_path": "test_dim.h5"}, headers=headers)
+
+    data = {"vectors": [[0.1] * 10001]}
+    response = requests.post(f"{BASE_URL}/add", json=data, headers=headers)
+    print(f"Add with vector dim=10001: {response.status_code}")
+    assert response.status_code == 422
+    assert "Vector dimension exceeds limit of 10000" in response.text
+
+    data = {"ids": [1], "vectors": [[0.1] * 10001]}
+    response = requests.post(f"{BASE_URL}/update", json=data, headers=headers)
+    print(f"Update with vector dim=10001: {response.status_code}")
+    assert response.status_code == 422
+    assert "Vector dimension exceeds limit of 10000" in response.text
+
 if __name__ == "__main__":
     test_metrics_protected()
     test_status_protected()
@@ -115,4 +147,5 @@ if __name__ == "__main__":
     test_dos_k_parameter()
     test_dos_protection_limits()
     test_dos_hnsw_parameters()
+    test_new_security_protections()
     print("ALL TESTS PASSED")

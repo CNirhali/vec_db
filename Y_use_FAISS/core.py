@@ -1,6 +1,7 @@
 import numpy as np
 from .index import HNSWIndex
 from .storage import DiskStorage
+import threading
 
 class VectorDB:
     """
@@ -11,18 +12,22 @@ class VectorDB:
         self.dim = dim
         self.index = HNSWIndex(dim, ef_construction=ef_construction, M=M, ef_search=ef_search)
         self.storage = DiskStorage(storage_path, dim)
+        self.lock = threading.Lock()
 
     def add(self, vectors, ids=None, metadata=None):
         """Add vectors (numpy array), optional ids, and optional metadata to the DB."""
-        self.index.add(vectors, ids)
-        self.storage.save_vectors(vectors, ids, metadata)
+        with self.lock:
+            self.index.add(vectors, ids)
+            self.storage.save_vectors(vectors, ids, metadata)
 
     def search(self, queries, k=10, filter_metadata=None):
         """Search for k nearest neighbors for each query vector, optionally filter by metadata."""
+        # Index search in hnswlib is thread-safe for reading
         labels, distances = self.index.search(queries, k)
         if filter_metadata is not None:
             # Load all metadata and filter results
-            _, all_ids, all_metadata = self.storage.load_vectors()
+            with self.lock:
+                _, all_ids, all_metadata = self.storage.load_vectors()
             if all_metadata is None or all_ids is None:
                 id_to_meta = {}
             else:
@@ -57,10 +62,15 @@ class VectorDB:
 
     def delete(self, ids):
         """Delete vectors by ID from the DB."""
-        self.index.delete(ids)
-        self.storage.delete_vectors(ids)
+        with self.lock:
+            self.index.delete(ids)
+            self.storage.delete_vectors(ids)
 
     def update(self, ids, vectors):
         """Update vectors by ID (delete old, add new)."""
-        self.delete(ids)
-        self.add(vectors, ids) 
+        # Lock is handled within delete and add, but we wrap here too for atomicity
+        with self.lock:
+            self.index.delete(ids)
+            self.index.add(vectors, ids)
+            self.storage.delete_vectors(ids)
+            self.storage.save_vectors(vectors, ids)
