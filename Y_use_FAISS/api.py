@@ -48,19 +48,30 @@ class InitRequest(BaseModel):
     storage_path: str
     ef_construction: int = Field(400, gt=0, le=1000)  # Security: Limit ef_construction to prevent DoS
     M: int = Field(32, gt=0, le=128)  # Security: Limit M to prevent DoS
-    ef_search: int = Field(128, gt=0)
+    ef_search: int = Field(128, gt=0, le=1000)  # Security: Limit ef_search to prevent DoS
 
     @field_validator('storage_path')
     @classmethod
     def validate_storage_path(cls, v: str) -> str:
-        # Security: Prevent path traversal
+        # Security: Prevent path traversal and restrict file extensions
         if ".." in v or os.path.isabs(v) or v.startswith("/") or v.startswith("\\"):
             raise ValueError("storage_path must be a relative path and cannot contain '..'")
+        if not (v.endswith(".h5") or v.endswith(".hdf5")):
+            raise ValueError("storage_path must have a .h5 or .hdf5 extension")
         return v
 
 class AddRequest(BaseModel):
-    vectors: List[List[float]] = Field(..., min_length=1, max_length=10000)  # Security: Batch size limit to prevent DoS
+    vectors: List[List[float]] = Field(..., min_length=1, max_length=10000)  # Security: Batch size limit
     ids: Optional[List[int]] = Field(None, max_length=10000)
+
+    @field_validator('vectors')
+    @classmethod
+    def validate_vectors_dim(cls, v: List[List[float]]) -> List[List[float]]:
+        # Security: Limit individual vector dimension to prevent memory exhaustion
+        for vector in v:
+            if len(vector) > 10000:
+                raise ValueError("Vector dimension exceeds limit of 10000")
+        return v
     metadata: Optional[List[dict]] = None
 
     @model_validator(mode='after')
@@ -83,6 +94,15 @@ class DeleteRequest(BaseModel):
 class UpdateRequest(BaseModel):
     ids: List[int] = Field(..., min_length=1, max_length=10000)  # Security: Batch size limit
     vectors: List[List[float]] = Field(..., min_length=1, max_length=10000)
+
+    @field_validator('vectors')
+    @classmethod
+    def validate_vectors_dim(cls, v: List[List[float]]) -> List[List[float]]:
+        # Security: Limit individual vector dimension to prevent memory exhaustion
+        for vector in v:
+            if len(vector) > 10000:
+                raise ValueError("Vector dimension exceeds limit of 10000")
+        return v
 
     @model_validator(mode='after')
     def validate_lengths(self) -> 'UpdateRequest':

@@ -7,3 +7,8 @@
 **Vulnerability:** Denial-of-Service (DoS) via unconstrained HNSW index parameters.
 **Learning:** Parameters like `ef_construction` and `M` in HNSW index construction directly impact CPU and memory usage. Without upper bounds, an attacker can provide extremely large values that exhaust server resources during index initialization.
 **Prevention:** Enforce strict upper limits on resource-intensive algorithm parameters using Pydantic's `Field(le=...)` validation in API request models.
+
+## 2026-03-07 - [Core Thread-Safety & Dynamic Index Resizing]
+**Vulnerability:** Service instability and potential data corruption due to non-thread-safe access to HNSW index and HDF5 storage.
+**Learning:** Concurrent write/search operations in a stateful FastAPI application can lead to `RuntimeError` or `Internal Server Error` if the underlying C++ libraries (like `hnswlib`) or file handles (like `h5py`) are not synchronized. Furthermore, `hnswlib` requires explicit `resize_index` calls if the number of elements exceeds the initial `max_elements`, which can happen during concurrent bursts.
+**Prevention:** Implement a global `threading.Lock` within the core database class to wrap all state-modifying operations (add, update, delete) and sensitive reads (metadata filtering). Ensure the index dynamically resizes based on current occupancy to avoid out-of-capacity errors.
