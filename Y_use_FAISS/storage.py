@@ -30,10 +30,11 @@ class DiskStorage:
                     idset.resize((idset.shape[0] + len(ids),))
                     idset[-len(ids):] = ids
             if metadata is not None:
-                # Store metadata as a JSON string array
-                meta_json = np.array([json.dumps(m) for m in metadata], dtype='S')
+                # Store metadata as a JSON string array using variable-length strings to prevent truncation
+                dt = h5py.string_dtype(encoding='utf-8')
+                meta_json = [json.dumps(m) for m in metadata]
                 if 'metadata' not in f:
-                    f.create_dataset('metadata', data=meta_json, maxshape=(None,), chunks=True, compression='gzip')
+                    f.create_dataset('metadata', data=meta_json, maxshape=(None,), dtype=dt, chunks=True, compression='gzip')
                 else:
                     mset = f['metadata']
                     mset.resize((mset.shape[0] + len(meta_json),))
@@ -46,7 +47,8 @@ class DiskStorage:
             ids = f['ids'][:] if 'ids' in f else None
             if 'metadata' in f:
                 meta_json = f['metadata'][:]
-                metadata = [json.loads(m.decode('utf-8')) for m in meta_json]
+                # Robustly decode metadata, handling both bytes and str
+                metadata = [json.loads(m.decode('utf-8') if isinstance(m, bytes) else m) for m in meta_json]
             else:
                 metadata = None
         return vectors, ids, metadata
@@ -56,15 +58,17 @@ class DiskStorage:
         with h5py.File(self.path, 'a') as f:
             if 'metadata' in f:
                 del f['metadata']
-            meta_json = np.array([json.dumps(m) for m in metadata], dtype='S')
-            f.create_dataset('metadata', data=meta_json, maxshape=(None,), chunks=True, compression='gzip')
+            dt = h5py.string_dtype(encoding='utf-8')
+            meta_json = [json.dumps(m) for m in metadata]
+            f.create_dataset('metadata', data=meta_json, maxshape=(None,), dtype=dt, chunks=True, compression='gzip')
 
     def load_metadata(self):
         """Load metadata array from disk."""
         with h5py.File(self.path, 'r') as f:
             if 'metadata' in f:
                 meta_json = f['metadata'][:]
-                return [json.loads(m.decode('utf-8')) for m in meta_json]
+                # Robustly decode metadata, handling both bytes and str
+                return [json.loads(m.decode('utf-8') if isinstance(m, bytes) else m) for m in meta_json]
             else:
                 return None
 
@@ -94,5 +98,6 @@ class DiskStorage:
             f.create_dataset('vectors', data=vectors, maxshape=(None, self.dim), chunks=True, compression='gzip')
             f.create_dataset('ids', data=all_ids, maxshape=(None,), chunks=True, compression='gzip')
             if metadata is not None:
-                meta_json = np.array([json.dumps(m) for m in metadata], dtype='S')
-                f.create_dataset('metadata', data=meta_json, maxshape=(None,), chunks=True, compression='gzip') 
+                dt = h5py.string_dtype(encoding='utf-8')
+                meta_json = [json.dumps(m) for m in metadata]
+                f.create_dataset('metadata', data=meta_json, maxshape=(None,), dtype=dt, chunks=True, compression='gzip')
