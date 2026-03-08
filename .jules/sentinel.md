@@ -12,3 +12,8 @@
 **Vulnerability:** Service instability and potential data corruption due to non-thread-safe access to HNSW index and HDF5 storage.
 **Learning:** Concurrent write/search operations in a stateful FastAPI application can lead to `RuntimeError` or `Internal Server Error` if the underlying C++ libraries (like `hnswlib`) or file handles (like `h5py`) are not synchronized. Furthermore, `hnswlib` requires explicit `resize_index` calls if the number of elements exceeds the initial `max_elements`, which can happen during concurrent bursts.
 **Prevention:** Implement a global `threading.Lock` within the core database class to wrap all state-modifying operations (add, update, delete) and sensitive reads (metadata filtering). Ensure the index dynamically resizes based on current occupancy to avoid out-of-capacity errors.
+
+## 2026-03-08 - [HDF5 Metadata Truncation & JSON Bypass]
+**Vulnerability:** Data corruption and potential security filter bypass due to silent truncation of HDF5 string datasets.
+**Learning:** Using fixed-length byte strings (`dtype='S'`) in HDF5/h5py causes subsequent data appends to be truncated if they exceed the initial maximum length. This leads to invalid JSON storage, causing `JSONDecodeError` (DoS) and incorrect metadata filtering.
+**Prevention:** Always use variable-length UTF-8 strings (`h5py.string_dtype(encoding='utf-8')`) for HDF5 datasets storing unstructured text or JSON data. Robustly handle both `bytes` and `str` during decoding to ensure compatibility across storage states.
