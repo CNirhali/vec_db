@@ -48,8 +48,16 @@ class HNSWIndex:
 
     def delete(self, ids):
         """Delete vectors by ID from the index (mark as deleted)."""
+        if not self.initialized:
+            return
         if hasattr(self.index, 'mark_deleted'):
-            for id in ids:
-                self.index.mark_deleted(id)
+            for vector_id in ids:
+                try:
+                    self.index.mark_deleted(vector_id)
+                except RuntimeError as e:
+                    # Security: Ignore "Label not found" to prevent API crash/500 on non-existent IDs
+                    if "Label not found" in str(e):
+                        continue
+                    raise e
         else:
             raise NotImplementedError("Delete not supported by this index type.") 

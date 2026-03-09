@@ -1,6 +1,7 @@
 import h5py
 import numpy as np
 import json
+import os
 
 class DiskStorage:
     """
@@ -42,9 +43,13 @@ class DiskStorage:
 
     def load_vectors(self):
         """Load all vectors, ids, and metadata from disk."""
+        if not os.path.exists(self.path):
+            return np.zeros((0, self.dim)), np.array([], dtype=np.int64), None
         with h5py.File(self.path, 'r') as f:
+            if 'vectors' not in f:
+                return np.zeros((0, self.dim)), np.array([], dtype=np.int64), None
             vectors = f['vectors'][:]
-            ids = f['ids'][:] if 'ids' in f else None
+            ids = f['ids'][:] if 'ids' in f else np.array([], dtype=np.int64)
             if 'metadata' in f:
                 meta_json = f['metadata'][:]
                 # Robustly decode metadata, handling both bytes and str
@@ -83,16 +88,21 @@ class DiskStorage:
     def delete_vectors(self, ids):
         """Delete vectors and ids from disk by ID."""
         vectors, all_ids, metadata = self.load_vectors()
-        if all_ids is None:
+        if len(all_ids) == 0:
             return
         mask = ~np.isin(all_ids, ids)
+        # If no changes are needed, return early
+        if np.all(mask):
+            return
         vectors = vectors[mask]
         all_ids = all_ids[mask]
         if metadata is not None:
             metadata = [m for i, m in enumerate(metadata) if mask[i]]
         with h5py.File(self.path, 'a') as f:
-            del f['vectors']
-            del f['ids']
+            if 'vectors' in f:
+                del f['vectors']
+            if 'ids' in f:
+                del f['ids']
             if 'metadata' in f:
                 del f['metadata']
             f.create_dataset('vectors', data=vectors, maxshape=(None, self.dim), chunks=True, compression='gzip')

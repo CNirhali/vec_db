@@ -17,3 +17,8 @@
 **Vulnerability:** Data corruption and potential security filter bypass due to silent truncation of HDF5 string datasets.
 **Learning:** Using fixed-length byte strings (`dtype='S'`) in HDF5/h5py causes subsequent data appends to be truncated if they exceed the initial maximum length. This leads to invalid JSON storage, causing `JSONDecodeError` (DoS) and incorrect metadata filtering.
 **Prevention:** Always use variable-length UTF-8 strings (`h5py.string_dtype(encoding='utf-8')`) for HDF5 datasets storing unstructured text or JSON data. Robustly handle both `bytes` and `str` during decoding to ensure compatibility across storage states.
+
+## 2026-03-09 - [HNSW Deletion Resilience]
+**Vulnerability:** Application-level Denial-of-Service (DoS) and crash via non-existent vector IDs and uninitialized storage access.
+**Learning:** `hnswlib` throws a `RuntimeError` ("Label not found") if `mark_deleted` is called on an ID that doesn't exist, and can segmentation fault if called on an uninitialized index. Furthermore, `h5py` operations on non-existent files or datasets can lead to `FileNotFoundError` or `KeyError`, crashing the API.
+**Prevention:** Explicitly catch and ignore "Label not found" errors in `index.py`. Implement guard checks for `self.initialized` in index operations and `os.path.exists` in storage operations. Ensure `load_vectors` returns empty numpy arrays of correct types (e.g., `np.int64`) instead of `None` to prevent `TypeError` in downstream vectorized operations.

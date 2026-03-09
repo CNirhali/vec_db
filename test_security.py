@@ -140,6 +140,14 @@ def test_new_security_protections():
     assert response.status_code == 422
     assert "Vector dimension exceeds limit of 10000" in response.text
 
+def test_delete_non_existent_id():
+    # Security: Ensure deleting a non-existent ID does not crash the server (DoS)
+    headers = {"X-API-Key": API_KEY}
+    requests.post(f"{BASE_URL}/init", json={"dim": 128, "storage_path": "security_test.h5"}, headers=headers)
+    response = requests.post(f"{BASE_URL}/delete", json={"ids": [999999]}, headers={"X-API-Key": API_KEY})
+    print(f"Delete non-existent ID response: {response.status_code}")
+    assert response.status_code == 200
+
 if __name__ == "__main__":
     test_metrics_protected()
     test_status_protected()
@@ -148,4 +156,5 @@ if __name__ == "__main__":
     test_dos_protection_limits()
     test_dos_hnsw_parameters()
     test_new_security_protections()
+    test_delete_non_existent_id()
     print("ALL TESTS PASSED")
