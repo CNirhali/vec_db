@@ -85,6 +85,15 @@ class AddRequest(BaseModel):
 
 class SearchRequest(BaseModel):
     queries: List[List[float]] = Field(..., min_length=1, max_length=10000)  # Security: Batch size limit
+
+    @field_validator('queries')
+    @classmethod
+    def validate_queries_dim(cls, v: List[List[float]]) -> List[List[float]]:
+        # Security: Limit individual query dimension to prevent memory exhaustion
+        for query in v:
+            if len(query) > 10000:
+                raise ValueError("Query dimension exceeds limit of 10000")
+        return v
     k: int = Field(10, gt=0, le=1000)  # Security: Limit k to prevent DoS
     filter_metadata: Optional[dict] = None
 
@@ -147,6 +156,11 @@ def add_vectors(req: AddRequest, x_api_key: str = Depends(api_key_auth)):
     except ValueError as e:
         # Security: Return 400 instead of 500 when input vectors are inhomogeneous
         raise HTTPException(status_code=400, detail=f"Invalid input vectors. Ensure all vectors have the same dimension. Error: {str(e)}")
+
+    # Security: Reject non-finite values (NaN, Inf) to prevent 500 Internal Server Error during JSON serialization
+    if not np.isfinite(vectors).all():
+        raise HTTPException(status_code=400, detail="Vectors contain non-finite values (NaN or Infinity)")
+
     # Security: Validate vector dimensions
     if vectors.shape[1] != db.dim:
         raise HTTPException(status_code=400, detail=f"Invalid vector dimension. Expected {db.dim}, got {vectors.shape[1]}")
@@ -163,6 +177,11 @@ def search_vectors(req: SearchRequest, x_api_key: str = Depends(api_key_auth)):
     except ValueError as e:
         # Security: Return 400 instead of 500 when queries are inhomogeneous
         raise HTTPException(status_code=400, detail=f"Invalid queries. Ensure all queries have the same dimension. Error: {str(e)}")
+
+    # Security: Reject non-finite values (NaN, Inf) to prevent 500 Internal Server Error during JSON serialization
+    if not np.isfinite(queries).all():
+        raise HTTPException(status_code=400, detail="Queries contain non-finite values (NaN or Infinity)")
+
     # Security: Validate query dimensions
     if queries.shape[1] != db.dim:
         raise HTTPException(status_code=400, detail=f"Invalid query dimension. Expected {db.dim}, got {queries.shape[1]}")
@@ -188,6 +207,11 @@ def update_vectors(req: UpdateRequest, x_api_key: str = Depends(api_key_auth)):
     except ValueError as e:
         # Security: Return 400 instead of 500 when input vectors are inhomogeneous
         raise HTTPException(status_code=400, detail=f"Invalid input vectors. Ensure all vectors have the same dimension. Error: {str(e)}")
+
+    # Security: Reject non-finite values (NaN, Inf) to prevent 500 Internal Server Error during JSON serialization
+    if not np.isfinite(vectors).all():
+        raise HTTPException(status_code=400, detail="Vectors contain non-finite values (NaN or Infinity)")
+
     # Security: Validate vector dimensions
     if vectors.shape[1] != db.dim:
         raise HTTPException(status_code=400, detail=f"Invalid vector dimension. Expected {db.dim}, got {vectors.shape[1]}")

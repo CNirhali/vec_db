@@ -140,6 +140,34 @@ def test_new_security_protections():
     assert response.status_code == 422
     assert "Vector dimension exceeds limit of 10000" in response.text
 
+    # Test query dimension limit (10,000)
+    data = {"queries": [[0.1] * 10001], "k": 1}
+    response = requests.post(f"{BASE_URL}/search", json=data, headers=headers)
+    print(f"Search with query dim=10001: {response.status_code}")
+    assert response.status_code == 422
+    assert "Query dimension exceeds limit of 10000" in response.text
+
+def test_nan_inf_protection():
+    import json
+    headers = {"X-API-Key": API_KEY, "Content-Type": "application/json"}
+    requests.post(f"{BASE_URL}/init", json={"dim": 2, "storage_path": "security_test.h5"}, headers=headers)
+
+    # Test NaN in Add
+    data = {"vectors": [[float('nan'), 0.1]], "ids": [1]}
+    payload = json.dumps(data)
+    response = requests.post(f"{BASE_URL}/add", data=payload, headers=headers)
+    print(f"Add NaN: {response.status_code}")
+    assert response.status_code == 400
+    assert "non-finite values" in response.text
+
+    # Test Inf in Search
+    data = {"queries": [[float('inf'), 0.1]], "k": 1}
+    payload = json.dumps(data)
+    response = requests.post(f"{BASE_URL}/search", data=payload, headers=headers)
+    print(f"Search Inf: {response.status_code}")
+    assert response.status_code == 400
+    assert "non-finite values" in response.text
+
 def test_delete_non_existent_id():
     # Security: Ensure deleting a non-existent ID does not crash the server (DoS)
     headers = {"X-API-Key": API_KEY}
@@ -156,5 +184,6 @@ if __name__ == "__main__":
     test_dos_protection_limits()
     test_dos_hnsw_parameters()
     test_new_security_protections()
+    test_nan_inf_protection()
     test_delete_non_existent_id()
     print("ALL TESTS PASSED")

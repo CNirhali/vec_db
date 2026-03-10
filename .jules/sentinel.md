@@ -22,3 +22,8 @@
 **Vulnerability:** Application-level Denial-of-Service (DoS) and crash via non-existent vector IDs and uninitialized storage access.
 **Learning:** `hnswlib` throws a `RuntimeError` ("Label not found") if `mark_deleted` is called on an ID that doesn't exist, and can segmentation fault if called on an uninitialized index. Furthermore, `h5py` operations on non-existent files or datasets can lead to `FileNotFoundError` or `KeyError`, crashing the API.
 **Prevention:** Explicitly catch and ignore "Label not found" errors in `index.py`. Implement guard checks for `self.initialized` in index operations and `os.path.exists` in storage operations. Ensure `load_vectors` returns empty numpy arrays of correct types (e.g., `np.int64`) instead of `None` to prevent `TypeError` in downstream vectorized operations.
+
+## 2026-03-10 - [Non-finite Value Serialization Error]
+**Vulnerability:** Information leakage and Denial-of-Service (DoS) via 500 Internal Server Errors caused by non-finite float values (NaN, Inf).
+**Learning:** Standard JSON encoders used by FastAPI/Starlette (like Python's `json` module) do not support `NaN` or `Infinity` by default according to the JSON spec (RFC 7159). When these values are returned in an API response (e.g., in distances), the serialization fails with a `ValueError`, resulting in a 500 error that can leak internals or disrupt service.
+**Prevention:** Always validate float-based input arrays for finiteness using `np.isfinite(arr).all()` before processing. Return a `400 Bad Request` if non-finite values are detected to ensure the API fails gracefully and securely.
