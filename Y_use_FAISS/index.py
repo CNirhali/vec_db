@@ -31,6 +31,7 @@ class HNSWIndex:
         if ids is None:
             ids = np.arange(self.index.get_current_count(), self.index.get_current_count() + len(vectors))
         self.index.add_items(vectors, ids)
+        return ids
 
     def search(self, queries, k=10):
         """Search for k nearest neighbors for each query vector."""

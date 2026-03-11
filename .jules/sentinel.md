@@ -27,3 +27,8 @@
 **Vulnerability:** Information leakage and Denial-of-Service (DoS) via 500 Internal Server Errors caused by non-finite float values (NaN, Inf).
 **Learning:** Standard JSON encoders used by FastAPI/Starlette (like Python's `json` module) do not support `NaN` or `Infinity` by default according to the JSON spec (RFC 7159). When these values are returned in an API response (e.g., in distances), the serialization fails with a `ValueError`, resulting in a 500 error that can leak internals or disrupt service.
 **Prevention:** Always validate float-based input arrays for finiteness using `np.isfinite(arr).all()` before processing. Return a `400 Bad Request` if non-finite values are detected to ensure the API fails gracefully and securely.
+
+## 2026-03-11 - [Data Integrity & Multi-Layer Consistency]
+**Vulnerability:** Denial-of-Service (DoS) crash and data loss due to inconsistent state between indexing and storage layers.
+**Learning:** In a multi-layered database (Index + Persistent Storage), any auto-generated state (like implicit IDs) must be explicitly returned to the coordinating layer to ensure it is correctly persisted. If the storage layer ends up with fewer IDs than vectors, vectorized operations (like numpy boolean masking during deletion) will crash with a `ValueError` or `IndexError`, leading to a permanent DoS for maintenance operations.
+**Prevention:** Ensure all state-generating methods in sub-components return the new state to the caller. Implement explicit length-validation safeguards in the storage layer before performing destructive operations or multi-array indexing.

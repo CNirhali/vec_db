@@ -90,6 +90,13 @@ class DiskStorage:
         vectors, all_ids, metadata = self.load_vectors()
         if len(all_ids) == 0:
             return
+
+        # Security: Safeguard against inconsistent state (IDs vs vectors length mismatch)
+        if len(all_ids) != len(vectors):
+            # If state is already corrupted, we can't safely use boolean masking.
+            # We fail gracefully instead of crashing the server.
+            raise RuntimeError(f"Storage state corrupted: {len(all_ids)} IDs for {len(vectors)} vectors. Deletion aborted to prevent further corruption.")
+
         mask = ~np.isin(all_ids, ids)
         # If no changes are needed, return early
         if np.all(mask):
