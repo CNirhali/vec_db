@@ -17,7 +17,7 @@ class VectorDB:
     def add(self, vectors, ids=None, metadata=None):
         """Add vectors (numpy array), optional ids, and optional metadata to the DB."""
         with self.lock:
-            self.index.add(vectors, ids)
+            ids = self.index.add(vectors, ids)
             self.storage.save_vectors(vectors, ids, metadata)
 
     def search(self, queries, k=10, filter_metadata=None):
@@ -71,6 +71,6 @@ class VectorDB:
         # Lock is handled within delete and add, but we wrap here too for atomicity
         with self.lock:
             self.index.delete(ids)
-            self.index.add(vectors, ids)
+            ids = self.index.add(vectors, ids)
             self.storage.delete_vectors(ids)
             self.storage.save_vectors(vectors, ids)
