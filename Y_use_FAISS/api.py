@@ -5,6 +5,7 @@ from typing import List, Optional, Any
 import numpy as np
 import os
 import secrets
+import json
 import functools
 import inspect
 from .core import VectorDB
@@ -74,6 +75,19 @@ class AddRequest(BaseModel):
         return v
     metadata: Optional[List[dict]] = None
 
+    @field_validator('metadata')
+    @classmethod
+    def validate_metadata(cls, v: Optional[List[dict]]) -> Optional[List[dict]]:
+        # Security: Limit metadata size and key count to prevent DoS
+        if v is None:
+            return v
+        for entry in v:
+            if len(entry) > 100:
+                raise ValueError("Metadata entry exceeds limit of 100 keys")
+            if len(json.dumps(entry)) > 10240:
+                raise ValueError("Metadata entry size exceeds limit of 10 KB")
+        return v
+
     @model_validator(mode='after')
     def validate_lengths(self) -> 'AddRequest':
         n_vectors = len(self.vectors)
@@ -96,6 +110,18 @@ class SearchRequest(BaseModel):
         return v
     k: int = Field(10, gt=0, le=1000)  # Security: Limit k to prevent DoS
     filter_metadata: Optional[dict] = None
+
+    @field_validator('filter_metadata')
+    @classmethod
+    def validate_filter_metadata(cls, v: Optional[dict]) -> Optional[dict]:
+        # Security: Limit filter metadata size and key count to prevent DoS
+        if v is None:
+            return v
+        if len(v) > 100:
+            raise ValueError("Filter metadata exceeds limit of 100 keys")
+        if len(json.dumps(v)) > 10240:
+            raise ValueError("Filter metadata size exceeds limit of 10 KB")
+        return v
 
 class DeleteRequest(BaseModel):
     ids: List[int] = Field(..., max_length=10000)  # Security: Batch size limit

@@ -176,6 +176,55 @@ def test_delete_non_existent_id():
     print(f"Delete non-existent ID response: {response.status_code}")
     assert response.status_code == 200
 
+def test_metadata_limits():
+    headers = {"X-API-Key": API_KEY}
+    requests.post(f"{BASE_URL}/init", json={"dim": 2, "storage_path": "meta_test.h5"}, headers=headers)
+
+    # Test key count limit in Add (100)
+    large_metadata = {f"key_{i}": i for i in range(101)}
+    data = {
+        "vectors": [[1.0, 1.0]],
+        "metadata": [large_metadata]
+    }
+    response = requests.post(f"{BASE_URL}/add", json=data, headers=headers)
+    print(f"Add with 101 keys: {response.status_code}")
+    assert response.status_code == 422
+    assert "Metadata entry exceeds limit of 100 keys" in response.text
+
+    # Test size limit in Add (10 KB)
+    huge_val = "x" * 11000
+    large_metadata = {"key": huge_val}
+    data = {
+        "vectors": [[1.0, 1.0]],
+        "metadata": [large_metadata]
+    }
+    response = requests.post(f"{BASE_URL}/add", json=data, headers=headers)
+    print(f"Add with >10KB metadata: {response.status_code}")
+    assert response.status_code == 422
+    assert "Metadata entry size exceeds limit of 10 KB" in response.text
+
+    # Test key count limit in Search (100)
+    large_filter = {f"key_{i}": i for i in range(101)}
+    data = {
+        "queries": [[1.0, 1.0]],
+        "filter_metadata": large_filter
+    }
+    response = requests.post(f"{BASE_URL}/search", json=data, headers=headers)
+    print(f"Search with 101 filter keys: {response.status_code}")
+    assert response.status_code == 422
+    assert "Filter metadata exceeds limit of 100 keys" in response.text
+
+    # Test size limit in Search (10 KB)
+    large_filter = {"key": huge_val}
+    data = {
+        "queries": [[1.0, 1.0]],
+        "filter_metadata": large_filter
+    }
+    response = requests.post(f"{BASE_URL}/search", json=data, headers=headers)
+    print(f"Search with >10KB filter: {response.status_code}")
+    assert response.status_code == 422
+    assert "Filter metadata size exceeds limit of 10 KB" in response.text
+
 if __name__ == "__main__":
     test_metrics_protected()
     test_status_protected()
@@ -186,4 +235,5 @@ if __name__ == "__main__":
     test_new_security_protections()
     test_nan_inf_protection()
     test_delete_non_existent_id()
+    test_metadata_limits()
     print("ALL TESTS PASSED")
