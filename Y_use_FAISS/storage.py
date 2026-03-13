@@ -30,16 +30,27 @@ class DiskStorage:
                     idset = f['ids']
                     idset.resize((idset.shape[0] + len(ids),))
                     idset[-len(ids):] = ids
+            n_new = vectors.shape[0]
             if metadata is not None:
                 # Store metadata as a JSON string array using variable-length strings to prevent truncation
                 dt = h5py.string_dtype(encoding='utf-8')
-                meta_json = [json.dumps(m) for m in metadata]
                 if 'metadata' not in f:
+                    # Security: Backfill empty metadata for existing vectors to maintain alignment
+                    n_existing = f['vectors'].shape[0] - n_new
+                    full_metadata = [{}] * n_existing + list(metadata)
+                    meta_json = [json.dumps(m) for m in full_metadata]
                     f.create_dataset('metadata', data=meta_json, maxshape=(None,), dtype=dt, chunks=True, compression='gzip')
                 else:
                     mset = f['metadata']
-                    mset.resize((mset.shape[0] + len(meta_json),))
-                    mset[-len(meta_json):] = meta_json
+                    mset.resize((mset.shape[0] + n_new,))
+                    meta_json = [json.dumps(m) for m in metadata]
+                    mset[-n_new:] = meta_json
+            elif 'metadata' in f:
+                # Security: Metadata not provided but dataset exists, append empty dicts to maintain alignment
+                mset = f['metadata']
+                mset.resize((mset.shape[0] + n_new,))
+                empty_meta = [json.dumps({})] * n_new
+                mset[-n_new:] = empty_meta
 
     def load_vectors(self):
         """Load all vectors, ids, and metadata from disk."""
