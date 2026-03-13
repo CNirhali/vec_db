@@ -32,3 +32,8 @@
 **Vulnerability:** Denial-of-Service (DoS) crash and data loss due to inconsistent state between indexing and storage layers.
 **Learning:** In a multi-layered database (Index + Persistent Storage), any auto-generated state (like implicit IDs) must be explicitly returned to the coordinating layer to ensure it is correctly persisted. If the storage layer ends up with fewer IDs than vectors, vectorized operations (like numpy boolean masking during deletion) will crash with a `ValueError` or `IndexError`, leading to a permanent DoS for maintenance operations.
 **Prevention:** Ensure all state-generating methods in sub-components return the new state to the caller. Implement explicit length-validation safeguards in the storage layer before performing destructive operations or multi-array indexing.
+
+## 2026-03-12 - [Metadata Alignment & Data Integrity]
+**Vulnerability:** Metadata misalignment and cross-contamination due to inconsistent dataset sizes in HDF5.
+**Learning:** When using multiple parallel datasets in HDF5 (e.g., vectors, IDs, and metadata), they must be kept in perfect sync. If metadata is only added for some batches, the datasets will drift in size, causing IDs to point to the wrong metadata entries or causing `zip()` operations to truncate data. This can lead to sensitive metadata being associated with the wrong vector, potentially bypassing security filters.
+**Prevention:** Always ensure that all parallel datasets are updated together. If a batch is missing metadata, use explicit placeholders (like empty JSON objects). If a dataset is created after other data has already been stored, backfill it with placeholders for the existing records.
