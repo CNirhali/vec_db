@@ -225,6 +225,21 @@ def test_metadata_limits():
     assert response.status_code == 422
     assert "Filter metadata size exceeds limit of 10 KB" in response.text
 
+def test_uninitialized_search_dos():
+    # Security: Ensure searching an uninitialized DB does not crash the server (DoS)
+    headers = {"X-API-Key": API_KEY}
+    # Use a unique path to ensure it's fresh
+    requests.post(f"{BASE_URL}/init", json={"dim": 128, "storage_path": "uninit_test.h5"}, headers=headers)
+
+    search_data = {
+        "queries": [[0.1] * 128],
+        "k": 5
+    }
+    response = requests.post(f"{BASE_URL}/search", json=search_data, headers=headers)
+    print(f"Search uninitialized DB response: {response.status_code}")
+    assert response.status_code == 200
+    assert response.json()["labels"] == [[]]
+
 if __name__ == "__main__":
     test_metrics_protected()
     test_status_protected()
@@ -236,4 +251,5 @@ if __name__ == "__main__":
     test_nan_inf_protection()
     test_delete_non_existent_id()
     test_metadata_limits()
+    test_uninitialized_search_dos()
     print("ALL TESTS PASSED")

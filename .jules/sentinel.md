@@ -37,3 +37,8 @@
 **Vulnerability:** Metadata misalignment and cross-contamination due to inconsistent dataset sizes in HDF5.
 **Learning:** When using multiple parallel datasets in HDF5 (e.g., vectors, IDs, and metadata), they must be kept in perfect sync. If metadata is only added for some batches, the datasets will drift in size, causing IDs to point to the wrong metadata entries or causing `zip()` operations to truncate data. This can lead to sensitive metadata being associated with the wrong vector, potentially bypassing security filters.
 **Prevention:** Always ensure that all parallel datasets are updated together. If a batch is missing metadata, use explicit placeholders (like empty JSON objects). If a dataset is created after other data has already been stored, backfill it with placeholders for the existing records.
+
+## 2026-03-14 - [HNSW Uninitialized Index DoS]
+**Vulnerability:** Denial-of-Service (DoS) crash when querying or saving an uninitialized `hnswlib` index.
+**Learning:** Calling `knn_query` or `save_index` on a `hnswlib.Index` object that hasn't been initialized via `init_index` or `load_index` can cause the entire Python process to crash (segmentation fault or unhandled C++ exception). This allows an attacker to easily crash the service by simply initializing a database and then performing a search before any data is added.
+**Prevention:** Always track the initialization state of the index. Implement guard checks in all methods that interact with the underlying C++ index (search, save, delete) and handle the uninitialized state gracefully (e.g., by returning empty results or returning early).
