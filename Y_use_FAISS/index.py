@@ -35,11 +35,20 @@ class HNSWIndex:
 
     def search(self, queries, k=10):
         """Search for k nearest neighbors for each query vector."""
+        if not self.initialized:
+            # Security: If index is not initialized, return empty results to prevent DoS crash (hnswlib knn_query on uninitialized index)
+            num_queries = queries.shape[0]
+            # hnswlib.knn_query returns a tuple of (labels, distances)
+            # labels is typically np.int64, distances is np.float32
+            return np.zeros((num_queries, 0), dtype=np.int64), np.zeros((num_queries, 0), dtype=np.float32)
         self.index.set_ef(self.ef_search)
         return self.index.knn_query(queries, k=k)
 
     def save(self, path='hnsw_index.bin'):
         """Save the index to disk."""
+        if not self.initialized:
+            # Security: Prevent crash if trying to save an uninitialized index
+            return
         self.index.save_index(path)
 
     def load(self, path='hnsw_index.bin'):
