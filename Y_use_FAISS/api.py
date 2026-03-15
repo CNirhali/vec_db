@@ -73,6 +73,16 @@ class AddRequest(BaseModel):
             if len(vector) > 10000:
                 raise ValueError("Vector dimension exceeds limit of 10000")
         return v
+
+    @field_validator('ids')
+    @classmethod
+    def validate_ids(cls, v: Optional[List[int]]) -> Optional[List[int]]:
+        # Security: Prevent negative IDs which are not supported by hnswlib (uint64)
+        if v is not None:
+            for vector_id in v:
+                if vector_id < 0:
+                    raise ValueError("IDs must be non-negative")
+        return v
     metadata: Optional[List[dict]] = None
 
     @field_validator('metadata')
@@ -89,12 +99,17 @@ class AddRequest(BaseModel):
         return v
 
     @model_validator(mode='after')
-    def validate_lengths(self) -> 'AddRequest':
+    def validate_add_request(self) -> 'AddRequest':
         n_vectors = len(self.vectors)
         if self.ids is not None and len(self.ids) != n_vectors:
             raise ValueError(f"Number of ids ({len(self.ids)}) must match number of vectors ({n_vectors})")
         if self.metadata is not None and len(self.metadata) != n_vectors:
             raise ValueError(f"Number of metadata entries ({len(self.metadata)}) must match number of vectors ({n_vectors})")
+
+        # Security: Limit total elements to prevent memory exhaustion (DoS)
+        total_elements = sum(len(v) for v in self.vectors)
+        if total_elements > 2000000:
+            raise ValueError(f"Total elements in vectors ({total_elements}) exceeds limit of 2,000,000")
         return self
 
 class SearchRequest(BaseModel):
@@ -108,6 +123,14 @@ class SearchRequest(BaseModel):
             if len(query) > 10000:
                 raise ValueError("Query dimension exceeds limit of 10000")
         return v
+
+    @model_validator(mode='after')
+    def validate_search_request(self) -> 'SearchRequest':
+        # Security: Limit total elements to prevent memory exhaustion (DoS)
+        total_elements = sum(len(q) for q in self.queries)
+        if total_elements > 2000000:
+            raise ValueError(f"Total elements in queries ({total_elements}) exceeds limit of 2,000,000")
+        return self
     k: int = Field(10, gt=0, le=1000)  # Security: Limit k to prevent DoS
     filter_metadata: Optional[dict] = None
 
@@ -126,6 +149,15 @@ class SearchRequest(BaseModel):
 class DeleteRequest(BaseModel):
     ids: List[int] = Field(..., max_length=10000)  # Security: Batch size limit
 
+    @field_validator('ids')
+    @classmethod
+    def validate_ids(cls, v: List[int]) -> List[int]:
+        # Security: Prevent negative IDs which are not supported by hnswlib (uint64)
+        for vector_id in v:
+            if vector_id < 0:
+                raise ValueError("IDs must be non-negative")
+        return v
+
 class UpdateRequest(BaseModel):
     ids: List[int] = Field(..., min_length=1, max_length=10000)  # Security: Batch size limit
     vectors: List[List[float]] = Field(..., min_length=1, max_length=10000)
@@ -139,10 +171,24 @@ class UpdateRequest(BaseModel):
                 raise ValueError("Vector dimension exceeds limit of 10000")
         return v
 
+    @field_validator('ids')
+    @classmethod
+    def validate_ids(cls, v: List[int]) -> List[int]:
+        # Security: Prevent negative IDs which are not supported by hnswlib (uint64)
+        for vector_id in v:
+            if vector_id < 0:
+                raise ValueError("IDs must be non-negative")
+        return v
+
     @model_validator(mode='after')
-    def validate_lengths(self) -> 'UpdateRequest':
+    def validate_update_request(self) -> 'UpdateRequest':
         if len(self.ids) != len(self.vectors):
             raise ValueError(f"Number of ids ({len(self.ids)}) must match number of vectors ({len(self.vectors)})")
+
+        # Security: Limit total elements to prevent memory exhaustion (DoS)
+        total_elements = sum(len(v) for v in self.vectors)
+        if total_elements > 2000000:
+            raise ValueError(f"Total elements in vectors ({total_elements}) exceeds limit of 2,000,000")
         return self
 
 @app.get("/metrics")

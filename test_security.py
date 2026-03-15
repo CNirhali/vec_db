@@ -240,6 +240,57 @@ def test_uninitialized_search_dos():
     assert response.status_code == 200
     assert response.json()["labels"] == [[]]
 
+def test_negative_ids():
+    headers = {"X-API-Key": API_KEY}
+    requests.post(f"{BASE_URL}/init", json={"dim": 2, "storage_path": "security_test.h5"}, headers=headers)
+
+    # Test negative ID in Add
+    data = {"vectors": [[0.1, 0.1]], "ids": [-1]}
+    response = requests.post(f"{BASE_URL}/add", json=data, headers=headers)
+    print(f"Add negative ID: {response.status_code}")
+    assert response.status_code == 422
+    assert "IDs must be non-negative" in response.text
+
+    # Test negative ID in Delete
+    data = {"ids": [-1]}
+    response = requests.post(f"{BASE_URL}/delete", json=data, headers=headers)
+    print(f"Delete negative ID: {response.status_code}")
+    assert response.status_code == 422
+    assert "IDs must be non-negative" in response.text
+
+    # Test negative ID in Update
+    data = {"ids": [-1], "vectors": [[0.1, 0.1]]}
+    response = requests.post(f"{BASE_URL}/update", json=data, headers=headers)
+    print(f"Update negative ID: {response.status_code}")
+    assert response.status_code == 422
+    assert "IDs must be non-negative" in response.text
+
+def test_total_elements_limit():
+    headers = {"X-API-Key": API_KEY}
+    # Limit is 2,000,000. 201 vectors with 10,000 dimensions = 2,010,000 elements.
+    requests.post(f"{BASE_URL}/init", json={"dim": 10000, "storage_path": "security_test.h5"}, headers=headers)
+
+    # Test Add limit
+    data = {"vectors": [[0.1] * 10000] * 201}
+    response = requests.post(f"{BASE_URL}/add", json=data, headers=headers)
+    print(f"Add > 2M elements: {response.status_code}")
+    assert response.status_code == 422
+    assert "exceeds limit of 2,000,000" in response.text
+
+    # Test Update limit
+    data = {"ids": list(range(201)), "vectors": [[0.1] * 10000] * 201}
+    response = requests.post(f"{BASE_URL}/update", json=data, headers=headers)
+    print(f"Update > 2M elements: {response.status_code}")
+    assert response.status_code == 422
+    assert "exceeds limit of 2,000,000" in response.text
+
+    # Test Search limit
+    data = {"queries": [[0.1] * 10000] * 201, "k": 1}
+    response = requests.post(f"{BASE_URL}/search", json=data, headers=headers)
+    print(f"Search > 2M elements: {response.status_code}")
+    assert response.status_code == 422
+    assert "exceeds limit of 2,000,000" in response.text
+
 if __name__ == "__main__":
     test_metrics_protected()
     test_status_protected()
@@ -252,4 +303,6 @@ if __name__ == "__main__":
     test_delete_non_existent_id()
     test_metadata_limits()
     test_uninitialized_search_dos()
+    test_negative_ids()
+    test_total_elements_limit()
     print("ALL TESTS PASSED")
