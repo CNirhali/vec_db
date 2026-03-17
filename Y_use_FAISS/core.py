@@ -2,6 +2,7 @@ import numpy as np
 from .index import HNSWIndex
 from .storage import DiskStorage
 import threading
+import os
 
 class VectorDB:
     """
@@ -13,6 +14,20 @@ class VectorDB:
         self.index = HNSWIndex(dim, ef_construction=ef_construction, M=M, ef_search=ef_search)
         self.storage = DiskStorage(storage_path, dim)
         self.lock = threading.Lock()
+
+        # Security: Derive index path from storage path and attempt recovery
+        self.index_path = os.path.splitext(storage_path)[0] + ".bin"
+        self._load_or_init_index()
+
+    def _load_or_init_index(self):
+        """Load index from disk or rebuild from storage if missing."""
+        if os.path.exists(self.index_path):
+            self.index.load(self.index_path)
+        elif os.path.exists(self.storage.path):
+            # Security: Rebuild index from storage if bin file is missing but data exists
+            vectors, ids, _ = self.storage.load_vectors()
+            if len(vectors) > 0:
+                self.index.add(vectors, ids)
 
     def add(self, vectors, ids=None, metadata=None):
         """Add vectors (numpy array), optional ids, and optional metadata to the DB."""

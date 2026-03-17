@@ -46,7 +46,7 @@ def api_key_auth(x_api_key: Optional[str] = Header(None)):
 
 class InitRequest(BaseModel):
     dim: int = Field(..., gt=0, le=10000)  # Security: Limit dimension to prevent excessive memory usage
-    storage_path: str
+    storage_path: str = Field(..., max_length=255)  # Security: Limit path length
     ef_construction: int = Field(400, gt=0, le=1000)  # Security: Limit ef_construction to prevent DoS
     M: int = Field(32, gt=0, le=128)  # Security: Limit M to prevent DoS
     ef_search: int = Field(128, gt=0, le=1000)  # Security: Limit ef_search to prevent DoS
@@ -77,8 +77,10 @@ class AddRequest(BaseModel):
     @field_validator('ids')
     @classmethod
     def validate_ids(cls, v: Optional[List[int]]) -> Optional[List[int]]:
-        # Security: Prevent negative IDs which are not supported by hnswlib (uint64)
+        # Security: Prevent negative IDs and ensure uniqueness within request
         if v is not None:
+            if len(v) != len(set(v)):
+                raise ValueError("IDs in request must be unique")
             for vector_id in v:
                 if vector_id < 0:
                     raise ValueError("IDs must be non-negative")
@@ -152,7 +154,9 @@ class DeleteRequest(BaseModel):
     @field_validator('ids')
     @classmethod
     def validate_ids(cls, v: List[int]) -> List[int]:
-        # Security: Prevent negative IDs which are not supported by hnswlib (uint64)
+        # Security: Prevent negative IDs and ensure uniqueness within request
+        if len(v) != len(set(v)):
+            raise ValueError("IDs in request must be unique")
         for vector_id in v:
             if vector_id < 0:
                 raise ValueError("IDs must be non-negative")
@@ -174,7 +178,9 @@ class UpdateRequest(BaseModel):
     @field_validator('ids')
     @classmethod
     def validate_ids(cls, v: List[int]) -> List[int]:
-        # Security: Prevent negative IDs which are not supported by hnswlib (uint64)
+        # Security: Prevent negative IDs and ensure uniqueness within request
+        if len(v) != len(set(v)):
+            raise ValueError("IDs in request must be unique")
         for vector_id in v:
             if vector_id < 0:
                 raise ValueError("IDs must be non-negative")
