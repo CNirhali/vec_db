@@ -291,6 +291,31 @@ def test_total_elements_limit():
     assert response.status_code == 422
     assert "exceeds limit of 2,000,000" in response.text
 
+def test_duplicate_ids():
+    headers = {"X-API-Key": API_KEY}
+    requests.post(f"{BASE_URL}/init", json={"dim": 2, "storage_path": "security_test.h5"}, headers=headers)
+
+    # Test duplicate IDs in Add
+    data = {"vectors": [[0.1, 0.1], [0.2, 0.2]], "ids": [1, 1]}
+    response = requests.post(f"{BASE_URL}/add", json=data, headers=headers)
+    print(f"Add duplicate IDs: {response.status_code}")
+    assert response.status_code == 422
+    assert "IDs in a batch must be unique" in response.text
+
+    # Test duplicate IDs in Delete
+    data = {"ids": [1, 1]}
+    response = requests.post(f"{BASE_URL}/delete", json=data, headers=headers)
+    print(f"Delete duplicate IDs: {response.status_code}")
+    assert response.status_code == 422
+    assert "IDs in a batch must be unique" in response.text
+
+    # Test duplicate IDs in Update
+    data = {"ids": [1, 1], "vectors": [[0.1, 0.1], [0.2, 0.2]]}
+    response = requests.post(f"{BASE_URL}/update", json=data, headers=headers)
+    print(f"Update duplicate IDs: {response.status_code}")
+    assert response.status_code == 422
+    assert "IDs in a batch must be unique" in response.text
+
 if __name__ == "__main__":
     test_metrics_protected()
     test_status_protected()
@@ -305,4 +330,5 @@ if __name__ == "__main__":
     test_uninitialized_search_dos()
     test_negative_ids()
     test_total_elements_limit()
+    test_duplicate_ids()
     print("ALL TESTS PASSED")

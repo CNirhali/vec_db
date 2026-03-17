@@ -77,6 +77,10 @@ class AddRequest(BaseModel):
     @field_validator('ids')
     @classmethod
     def validate_ids(cls, v: Optional[List[int]]) -> Optional[List[int]]:
+        # Security: Prevent negative IDs and ensure uniqueness to avoid index inconsistencies
+        if v is not None:
+            if len(v) != len(set(v)):
+                raise ValueError("IDs in a batch must be unique")
         # Security: Prevent negative IDs and ensure uniqueness within request
         if v is not None:
             if len(v) != len(set(v)):
@@ -154,6 +158,9 @@ class DeleteRequest(BaseModel):
     @field_validator('ids')
     @classmethod
     def validate_ids(cls, v: List[int]) -> List[int]:
+        # Security: Prevent negative IDs and ensure uniqueness to avoid index inconsistencies
+        if len(v) != len(set(v)):
+            raise ValueError("IDs in a batch must be unique")
         # Security: Prevent negative IDs and ensure uniqueness within request
         if len(v) != len(set(v)):
             raise ValueError("IDs in request must be unique")
@@ -178,6 +185,9 @@ class UpdateRequest(BaseModel):
     @field_validator('ids')
     @classmethod
     def validate_ids(cls, v: List[int]) -> List[int]:
+        # Security: Prevent negative IDs and ensure uniqueness to avoid index inconsistencies
+        if len(v) != len(set(v)):
+            raise ValueError("IDs in a batch must be unique")
         # Security: Prevent negative IDs and ensure uniqueness within request
         if len(v) != len(set(v)):
             raise ValueError("IDs in request must be unique")
