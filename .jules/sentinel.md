@@ -47,3 +47,7 @@
 **Vulnerability:** Potential data corruption and index inconsistency via duplicate IDs in batch requests.
 **Learning:** Underlying C++ libraries like `hnswlib` may exhibit undefined behavior or state drift when processing duplicate IDs within a single batch operation (e.g., adding the same ID twice in one call). This can lead to the persistent storage and the in-memory index becoming out of sync.
 **Prevention:** Enforce ID uniqueness at the API boundary using Pydantic model validators for all batch endpoints (`/add`, `/update`, `/delete`).
+## 2026-03-17 - [ID Collision & Index Recovery]
+**Vulnerability:** Deliberate ID collisions in batch requests and data loss after server restarts due to lack of automatic index restoration.
+**Learning:** In a vector database using separate indexing and storage layers, allowing duplicate IDs in a single request can lead to inconsistent state or internal crashes in the indexing library. Furthermore, if the in-memory index is not automatically restored from persistent storage upon restart, the database becomes unsearchable even if data exists on disk.
+**Prevention:** Implement strict uniqueness validation for IDs in all batch endpoints. Enhance the initialization process to automatically load the binary index or rebuild it from the underlying storage layer if the index file is missing. Avoid synchronous full-index writes on every small update to mitigate Disk I/O Denial-of-Service (DoS) risks.
