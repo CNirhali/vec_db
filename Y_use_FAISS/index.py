@@ -17,16 +17,15 @@ class HNSWIndex:
     def add(self, vectors, ids=None):
         """Add vectors to the index."""
         if not self.initialized:
-            # For simplicity in this demo, we use a large max_elements or allow resizing if supported.
-            # hnswlib requires a predefined max_elements, let's use a reasonably large default
-            # or ideally manage it dynamically.
-            self.index.init_index(max_elements=100000, ef_construction=self.ef_construction, M=self.M)
+            # Security: Use max of default or batch size to prevent overflow on first add
+            initial_max = max(100000, len(vectors))
+            self.index.init_index(max_elements=initial_max, ef_construction=self.ef_construction, M=self.M)
             self.initialized = True
-        else:
-            # Check if we need to resize
-            current_count = self.index.get_current_count()
-            if current_count + len(vectors) > self.index.get_max_elements():
-                self.index.resize_index(max(current_count + len(vectors), self.index.get_max_elements() * 2))
+
+        # Check if we need to resize (handles both first-time and subsequent adds)
+        current_count = self.index.get_current_count()
+        if current_count + len(vectors) > self.index.get_max_elements():
+            self.index.resize_index(max(current_count + len(vectors), self.index.get_max_elements() * 2))
 
         if ids is None:
             ids = np.arange(self.index.get_current_count(), self.index.get_current_count() + len(vectors))
