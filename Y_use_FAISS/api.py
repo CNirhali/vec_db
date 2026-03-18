@@ -306,6 +306,14 @@ def update_vectors(req: UpdateRequest, x_api_key: str = Depends(api_key_auth)):
     db.update(req.ids, vectors)
     return {"status": "ok", "updated": len(req.ids)}
 
+@app.post("/save")
+@instrument("/save")
+def save_db(x_api_key: str = Depends(api_key_auth)):
+    if db is None:
+        raise HTTPException(status_code=400, detail="DB not initialized")
+    db.save()
+    return {"status": "ok", "message": "Index saved to disk"}
+
 @app.get("/status")
 @instrument("/status")
 def status(x_api_key: str = Depends(api_key_auth)):

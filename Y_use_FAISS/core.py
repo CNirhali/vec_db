@@ -67,8 +67,10 @@ class VectorDB:
 
     def save(self):
         """Persist index and storage to disk."""
-        self.index.save()
-        self.storage.save()
+        with self.lock:
+            # Security: Use the correct index path for persistence
+            self.index.save(self.index_path)
+            self.storage.save()
 
     def load(self):
         """Load index and storage from disk."""
