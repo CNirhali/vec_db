@@ -51,3 +51,8 @@
 **Vulnerability:** Deliberate ID collisions in batch requests and data loss after server restarts due to lack of automatic index restoration.
 **Learning:** In a vector database using separate indexing and storage layers, allowing duplicate IDs in a single request can lead to inconsistent state or internal crashes in the indexing library. Furthermore, if the in-memory index is not automatically restored from persistent storage upon restart, the database becomes unsearchable even if data exists on disk.
 **Prevention:** Implement strict uniqueness validation for IDs in all batch endpoints. Enhance the initialization process to automatically load the binary index or rebuild it from the underlying storage layer if the index file is missing. Avoid synchronous full-index writes on every small update to mitigate Disk I/O Denial-of-Service (DoS) risks.
+
+## 2026-03-18 - [Explicit Persistence & Thread-Safe Index Saving]
+**Vulnerability:** Data loss or corruption due to missing manual persistence endpoint and non-thread-safe index saving.
+**Learning:** In high-concurrency environments, calling `save_index` on a shared state without proper synchronization can lead to race conditions where the index file is written in an inconsistent state if updates are happening simultaneously. Furthermore, relying purely on implicit saves or lacking a manual save trigger can lead to significant data loss if the process terminates unexpectedly between automatic save intervals.
+**Prevention:** Implement an explicit `/save` API endpoint for manual persistence. Ensure all persistence operations are wrapped in the same global database lock used by modification methods (`add`, `update`, `delete`) to guarantee state consistency during the write-to-disk process.
