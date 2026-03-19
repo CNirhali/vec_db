@@ -56,3 +56,8 @@
 **Vulnerability:** Data loss or corruption due to missing manual persistence endpoint and non-thread-safe index saving.
 **Learning:** In high-concurrency environments, calling `save_index` on a shared state without proper synchronization can lead to race conditions where the index file is written in an inconsistent state if updates are happening simultaneously. Furthermore, relying purely on implicit saves or lacking a manual save trigger can lead to significant data loss if the process terminates unexpectedly between automatic save intervals.
 **Prevention:** Implement an explicit `/save` API endpoint for manual persistence. Ensure all persistence operations are wrapped in the same global database lock used by modification methods (`add`, `update`, `delete`) to guarantee state consistency during the write-to-disk process.
+
+## 2026-03-19 - [Robust Search Parameters & Safe Metadata Comparison]
+**Vulnerability:** Denial-of-Service (DoS) via 500 Internal Server Errors caused by unvalidated search parameters (k > count) and unhashable metadata types.
+**Learning:** In `hnswlib`, requesting more neighbors (`k`) than available items can lead to a `RuntimeError` that crashes the request. Additionally, performing set-based metadata comparisons (like `items() <= items()`) raises a `TypeError` if metadata values are unhashable (e.g., lists), leading to further 500 errors.
+**Prevention:** Always cap the requested `k` to the current number of elements in the index. Use safer comparison patterns like `all()` with `.get()` for metadata filtering to robustly handle diverse JSON-compatible data types without crashing the server.

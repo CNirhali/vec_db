@@ -40,6 +40,15 @@ class HNSWIndex:
             # hnswlib.knn_query returns a tuple of (labels, distances)
             # labels is typically np.int64, distances is np.float32
             return np.zeros((num_queries, 0), dtype=np.int64), np.zeros((num_queries, 0), dtype=np.float32)
+
+        current_count = self.index.get_current_count()
+        if current_count == 0:
+            num_queries = queries.shape[0]
+            return np.zeros((num_queries, 0), dtype=np.int64), np.zeros((num_queries, 0), dtype=np.float32)
+
+        # Security: Cap k to prevent RuntimeError in hnswlib when k > current_count
+        k = min(k, current_count)
+
         self.index.set_ef(self.ef_search)
         return self.index.knn_query(queries, k=k)
 
