@@ -6,6 +6,7 @@ import numpy as np
 import os
 import secrets
 import json
+import re
 import functools
 import inspect
 from .core import VectorDB
@@ -57,6 +58,9 @@ class InitRequest(BaseModel):
         # Security: Prevent path traversal and restrict file extensions
         if ".." in v or os.path.isabs(v) or v.startswith("/") or v.startswith("\\"):
             raise ValueError("storage_path must be a relative path and cannot contain '..'")
+        # Security: Defense-in-depth via regex validation for safe characters
+        if not re.match(r"^[a-zA-Z0-9_\-\./]+$", v):
+            raise ValueError("storage_path contains invalid characters")
         if not (v.endswith(".h5") or v.endswith(".hdf5")):
             raise ValueError("storage_path must have a .h5 or .hdf5 extension")
         return v
@@ -77,17 +81,15 @@ class AddRequest(BaseModel):
     @field_validator('ids')
     @classmethod
     def validate_ids(cls, v: Optional[List[int]]) -> Optional[List[int]]:
-        # Security: Prevent negative IDs and ensure uniqueness to avoid index inconsistencies
+        # Security: Prevent negative IDs, ensure uniqueness, and cap at uint64 max to avoid index inconsistencies and OverflowError
         if v is not None:
             if len(v) != len(set(v)):
                 raise ValueError("IDs in a batch must be unique")
-        # Security: Prevent negative IDs and ensure uniqueness within request
-        if v is not None:
-            if len(v) != len(set(v)):
-                raise ValueError("IDs in request must be unique")
             for vector_id in v:
                 if vector_id < 0:
                     raise ValueError("IDs must be non-negative")
+                if vector_id > 18446744073709551615:
+                    raise ValueError("IDs must not exceed 64-bit unsigned integer limit (18446744073709551615)")
         return v
     metadata: Optional[List[dict]] = None
 
@@ -158,15 +160,14 @@ class DeleteRequest(BaseModel):
     @field_validator('ids')
     @classmethod
     def validate_ids(cls, v: List[int]) -> List[int]:
-        # Security: Prevent negative IDs and ensure uniqueness to avoid index inconsistencies
+        # Security: Prevent negative IDs, ensure uniqueness, and cap at uint64 max to avoid index inconsistencies and OverflowError
         if len(v) != len(set(v)):
             raise ValueError("IDs in a batch must be unique")
-        # Security: Prevent negative IDs and ensure uniqueness within request
-        if len(v) != len(set(v)):
-            raise ValueError("IDs in request must be unique")
         for vector_id in v:
             if vector_id < 0:
                 raise ValueError("IDs must be non-negative")
+            if vector_id > 18446744073709551615:
+                raise ValueError("IDs must not exceed 64-bit unsigned integer limit (18446744073709551615)")
         return v
 
 class UpdateRequest(BaseModel):
@@ -185,15 +186,14 @@ class UpdateRequest(BaseModel):
     @field_validator('ids')
     @classmethod
     def validate_ids(cls, v: List[int]) -> List[int]:
-        # Security: Prevent negative IDs and ensure uniqueness to avoid index inconsistencies
+        # Security: Prevent negative IDs, ensure uniqueness, and cap at uint64 max to avoid index inconsistencies and OverflowError
         if len(v) != len(set(v)):
             raise ValueError("IDs in a batch must be unique")
-        # Security: Prevent negative IDs and ensure uniqueness within request
-        if len(v) != len(set(v)):
-            raise ValueError("IDs in request must be unique")
         for vector_id in v:
             if vector_id < 0:
                 raise ValueError("IDs must be non-negative")
+            if vector_id > 18446744073709551615:
+                raise ValueError("IDs must not exceed 64-bit unsigned integer limit (18446744073709551615)")
         return v
 
     @model_validator(mode='after')

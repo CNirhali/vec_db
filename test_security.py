@@ -316,6 +316,46 @@ def test_duplicate_ids():
     assert response.status_code == 422
     assert "IDs in a batch must be unique" in response.text
 
+def test_extreme_large_ids():
+    headers = {"X-API-Key": API_KEY}
+    requests.post(f"{BASE_URL}/init", json={"dim": 2, "storage_path": "security_test.h5"}, headers=headers)
+
+    # 2^64
+    large_id = 18446744073709551616
+
+    # Test extreme large ID in Add
+    data = {"vectors": [[0.1, 0.1]], "ids": [large_id]}
+    response = requests.post(f"{BASE_URL}/add", json=data, headers=headers)
+    print(f"Add extreme large ID: {response.status_code}")
+    assert response.status_code == 422
+    assert "IDs must not exceed 64-bit unsigned integer limit" in response.text
+
+    # Test extreme large ID in Delete
+    data = {"ids": [large_id]}
+    response = requests.post(f"{BASE_URL}/delete", json=data, headers=headers)
+    print(f"Delete extreme large ID: {response.status_code}")
+    assert response.status_code == 422
+    assert "IDs must not exceed 64-bit unsigned integer limit" in response.text
+
+    # Test extreme large ID in Update
+    data = {"ids": [large_id], "vectors": [[0.1, 0.1]]}
+    response = requests.post(f"{BASE_URL}/update", json=data, headers=headers)
+    print(f"Update extreme large ID: {response.status_code}")
+    assert response.status_code == 422
+    assert "IDs must not exceed 64-bit unsigned integer limit" in response.text
+
+def test_storage_path_regex():
+    headers = {"X-API-Key": API_KEY}
+
+    # Test invalid character in storage_path
+    invalid_paths = ["test;.h5", "test\$.h5", "test>test.h5", "test|test.h5", "test .h5"]
+    for path in invalid_paths:
+        data = {"dim": 128, "storage_path": path}
+        response = requests.post(f"{BASE_URL}/init", json=data, headers=headers)
+        print(f"Init with {path}: {response.status_code}")
+        assert response.status_code == 422
+        assert "storage_path contains invalid characters" in response.text
+
 if __name__ == "__main__":
     test_metrics_protected()
     test_status_protected()
@@ -331,4 +371,6 @@ if __name__ == "__main__":
     test_negative_ids()
     test_total_elements_limit()
     test_duplicate_ids()
+    test_extreme_large_ids()
+    test_storage_path_regex()
     print("ALL TESTS PASSED")
