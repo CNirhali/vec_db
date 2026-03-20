@@ -52,9 +52,11 @@ class VectorDB:
             filtered_distances = []
             for i, row in enumerate(labels):
                 # Security: metadata filtering with support for exact match or subset match
+                # Use all() for safe comparison of potentially unhashable values (e.g. lists) in metadata
                 filtered = [(l, distances[i][j]) for j, l in enumerate(row)
                             if id_to_meta.get(int(l), {}) == filter_metadata or
-                            (isinstance(id_to_meta.get(int(l)), dict) and filter_metadata.items() <= id_to_meta.get(int(l), {}).items())]
+                            (isinstance(id_to_meta.get(int(l)), dict) and
+                             all(id_to_meta.get(int(l), {}).get(key) == value for key, value in filter_metadata.items()))]
                 if filtered:
                     filtered_labels.append([int(l) for l, _ in filtered])
                     filtered_distances.append([float(d) for _, d in filtered])
