@@ -61,3 +61,8 @@
 **Vulnerability:** Denial-of-Service (DoS) via 500 Internal Server Errors caused by unvalidated search parameters (k > count) and unhashable metadata types.
 **Learning:** In `hnswlib`, requesting more neighbors (`k`) than available items can lead to a `RuntimeError` that crashes the request. Additionally, performing set-based metadata comparisons (like `items() <= items()`) raises a `TypeError` if metadata values are unhashable (e.g., lists), leading to further 500 errors.
 **Prevention:** Always cap the requested `k` to the current number of elements in the index. Use safer comparison patterns like `all()` with `.get()` for metadata filtering to robustly handle diverse JSON-compatible data types without crashing the server.
+
+## 2026-03-20 - [Integer Overflow & Strict Path Whitelisting]
+**Vulnerability:** Service-level Denial-of-Service (DoS) via `OverflowError` and potential injection risks in file paths.
+**Learning:** Large Python integers exceeding the 64-bit unsigned limit ($2^{64}-1$) cause `OverflowError` when passed to C-extension libraries like `hnswlib`, resulting in a 500 Internal Server Error. Furthermore, relying solely on blacklisting (like `..`) for path traversal is less robust than whitelisting allowed characters.
+**Prevention:** Explicitly validate that all user-provided IDs do not exceed $18,446,744,073,709,551,615$. Use a strict regex whitelist (e.g., `^[a-zA-Z0-9_\-\./]+$`) for storage paths to prevent the use of shell metacharacters or other unexpected input.
