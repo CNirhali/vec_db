@@ -66,3 +66,8 @@
 **Vulnerability:** Service-level Denial-of-Service (DoS) via `OverflowError` and potential injection risks in file paths.
 **Learning:** Large Python integers exceeding the 64-bit unsigned limit ($2^{64}-1$) cause `OverflowError` when passed to C-extension libraries like `hnswlib`, resulting in a 500 Internal Server Error. Furthermore, relying solely on blacklisting (like `..`) for path traversal is less robust than whitelisting allowed characters.
 **Prevention:** Explicitly validate that all user-provided IDs do not exceed $18,446,744,073,709,551,615$. Use a strict regex whitelist (e.g., `^[a-zA-Z0-9_\-\./]+$`) for storage paths to prevent the use of shell metacharacters or other unexpected input.
+
+## 2026-03-22 - [Automatic ID Collision Prevention]
+**Vulnerability:** ID collisions and data corruption during automatic ID generation.
+**Learning:** Relying on 'get_current_count()' from the indexing library to generate new IDs is unreliable when vectors have been deleted or when the index is rebuilt from a subset of data. This leads to new vectors being assigned IDs that are already in use in the persistent storage, causing metadata misalignment and data corruption.
+**Prevention:** Implement a 'max_id' tracker within the index class that persists across the application's lifecycle. Always generate new IDs by incrementing the highest ID ever used, and re-calculate this value from the existing dataset upon index initialization or loading.

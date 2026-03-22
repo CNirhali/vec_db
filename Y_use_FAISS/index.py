@@ -13,6 +13,7 @@ class HNSWIndex:
         self.ef_search = ef_search
         self.index = hnswlib.Index(space=space, dim=dim)
         self.initialized = False
+        self.max_id = -1
 
     def add(self, vectors, ids=None):
         """Add vectors to the index."""
@@ -28,8 +29,13 @@ class HNSWIndex:
             self.index.resize_index(max(current_count + len(vectors), self.index.get_max_elements() * 2))
 
         if ids is None:
-            ids = np.arange(self.index.get_current_count(), self.index.get_current_count() + len(vectors))
+            # Security: Use max_id + 1 for new IDs to prevent collisions after restarts or deletions
+            ids = np.arange(self.max_id + 1, self.max_id + 1 + len(vectors))
+
         self.index.add_items(vectors, ids)
+        # Security: Update max_id to track the largest ID used, checking for non-empty to avoid np.max() crash
+        if len(ids) > 0:
+            self.max_id = max(self.max_id, int(np.max(ids)))
         return ids
 
     def search(self, queries, k=10):
@@ -63,6 +69,8 @@ class HNSWIndex:
         """Load the index from disk."""
         self.index.load_index(path, max_elements=0)
         self.initialized = True
+        # Security: Re-calculate max_id from the loaded index
+        self.max_id = max(self.index.get_ids_list(), default=-1)
 
     def delete(self, ids):
         """Delete vectors by ID from the index (mark as deleted)."""
