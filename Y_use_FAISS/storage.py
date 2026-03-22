@@ -14,6 +14,15 @@ class DiskStorage:
         self.ids = None
         self.metadata = None
 
+    def get_dim(self):
+        """Get the dimension of existing vectors in the storage file."""
+        if not os.path.exists(self.path):
+            return None
+        with h5py.File(self.path, 'r') as f:
+            if 'vectors' in f:
+                return f['vectors'].shape[1]
+        return None
+
     def save_vectors(self, vectors, ids=None, metadata=None):
         """Save vectors, optional ids, and optional metadata to disk."""
         with h5py.File(self.path, 'a') as f:
