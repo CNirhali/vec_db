@@ -71,3 +71,8 @@
 **Vulnerability:** ID collisions and data corruption during automatic ID generation.
 **Learning:** Relying on 'get_current_count()' from the indexing library to generate new IDs is unreliable when vectors have been deleted or when the index is rebuilt from a subset of data. This leads to new vectors being assigned IDs that are already in use in the persistent storage, causing metadata misalignment and data corruption.
 **Prevention:** Implement a 'max_id' tracker within the index class that persists across the application's lifecycle. Always generate new IDs by incrementing the highest ID ever used, and re-calculate this value from the existing dataset upon index initialization or loading.
+
+## 2026-03-24 - [Dimension Consistency & Secure Exception Handling]
+**Vulnerability:** Data corruption via dimension mismatch and information leakage via unhandled OSErrors.
+**Learning:** Re-initializing a database with a different dimension than the existing HDF5 storage leads to silent data corruption (truncation) during subsequent operations. Furthermore, narrow exception handling (only `ValueError`) in API endpoints results in 500 Internal Server Errors when file system issues (`OSError`) occur, which can leak stack traces or system details.
+**Prevention:** Verify requested dimensions against existing storage during initialization and raise a `ValueError` on mismatch. Use broader exception handling (catching both `ValueError` and `OSError`) in API endpoints and return generic error messages for system-level errors to prevent information leakage.

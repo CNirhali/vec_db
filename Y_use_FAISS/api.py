@@ -231,7 +231,13 @@ def instrument(endpoint):
 @instrument("/init")
 def init_db(req: InitRequest, x_api_key: str = Depends(api_key_auth)):
     global db
-    db = VectorDB(req.dim, req.storage_path, ef_construction=req.ef_construction, M=req.M, ef_search=req.ef_search)
+    try:
+        db = VectorDB(req.dim, req.storage_path, ef_construction=req.ef_construction, M=req.M, ef_search=req.ef_search)
+    except (ValueError, OSError) as e:
+        # Security: Handle dimension mismatch or file-related errors as 400 Bad Request to avoid 500/Internal Server Error
+        # Use a generic message for OSError to prevent path/system detail leakage
+        detail = str(e) if isinstance(e, ValueError) else "Storage initialization failed. Please check the provided path and file permissions."
+        raise HTTPException(status_code=400, detail=detail)
     return {"status": "initialized", "dim": req.dim, "storage_path": req.storage_path, "ef_construction": req.ef_construction, "M": req.M, "ef_search": req.ef_search}
 
 @app.post("/add")

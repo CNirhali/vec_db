@@ -11,8 +11,14 @@ class VectorDB:
     def __init__(self, dim, storage_path, ef_construction=400, M=32, ef_search=128):
         """Initialize the DB with vector dimension, storage path, and HNSW parameters."""
         self.dim = dim
-        self.index = HNSWIndex(dim, ef_construction=ef_construction, M=M, ef_search=ef_search)
         self.storage = DiskStorage(storage_path, dim)
+
+        # Security: Verify that the provided dimension matches existing storage to prevent corruption
+        existing_dim = self.storage.get_dim()
+        if existing_dim is not None and existing_dim != dim:
+            raise ValueError(f"Dimension mismatch: storage has dim {existing_dim}, but {dim} was requested.")
+
+        self.index = HNSWIndex(dim, ef_construction=ef_construction, M=M, ef_search=ef_search)
         self.lock = threading.Lock()
 
         # Security: Derive index path from storage path and attempt recovery
