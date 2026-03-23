@@ -46,10 +46,11 @@ class VectorDB:
         # Index search in hnswlib is thread-safe for reading
         labels, distances = self.index.search(queries, k)
         if filter_metadata is not None:
-            # Load all metadata and filter results
+            # Security: Optimize memory usage by only loading IDs and metadata, not the full vectors dataset
             with self.lock:
-                _, all_ids, all_metadata = self.storage.load_vectors()
-            if all_metadata is None or all_ids is None:
+                all_ids = self.storage.load_ids()
+                all_metadata = self.storage.load_metadata()
+            if all_metadata is None or len(all_ids) == 0:
                 id_to_meta = {}
             else:
                 id_to_meta = {int(i): m for i, m in zip(all_ids, all_metadata)}

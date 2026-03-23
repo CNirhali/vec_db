@@ -61,6 +61,15 @@ class DiskStorage:
                 empty_meta = [json.dumps({})] * n_new
                 mset[-n_new:] = empty_meta
 
+    def load_ids(self):
+        """Load all IDs from disk."""
+        if not os.path.exists(self.path):
+            return np.array([], dtype=np.int64)
+        with h5py.File(self.path, 'r') as f:
+            if 'ids' not in f:
+                return np.array([], dtype=np.int64)
+            return f['ids'][:]
+
     def load_vectors(self):
         """Load all vectors, ids, and metadata from disk."""
         if not os.path.exists(self.path):

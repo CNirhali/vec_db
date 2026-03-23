@@ -138,6 +138,11 @@ class SearchRequest(BaseModel):
         total_elements = sum(len(q) for q in self.queries)
         if total_elements > 2000000:
             raise ValueError(f"Total elements in queries ({total_elements}) exceeds limit of 2,000,000")
+
+        # Security: Limit total results (n_queries * k) to prevent result-set DoS
+        total_results = len(self.queries) * self.k
+        if total_results > 100000:
+            raise ValueError(f"Total requested results ({total_results}) exceeds limit of 100,000")
         return self
     k: int = Field(10, gt=0, le=1000)  # Security: Limit k to prevent DoS
     filter_metadata: Optional[dict] = None
