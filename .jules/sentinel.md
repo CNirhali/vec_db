@@ -76,3 +76,8 @@
 **Vulnerability:** Data corruption via dimension mismatch and information leakage via unhandled OSErrors.
 **Learning:** Re-initializing a database with a different dimension than the existing HDF5 storage leads to silent data corruption (truncation) during subsequent operations. Furthermore, narrow exception handling (only `ValueError`) in API endpoints results in 500 Internal Server Errors when file system issues (`OSError`) occur, which can leak stack traces or system details.
 **Prevention:** Verify requested dimensions against existing storage during initialization and raise a `ValueError` on mismatch. Use broader exception handling (catching both `ValueError` and `OSError`) in API endpoints and return generic error messages for system-level errors to prevent information leakage.
+
+## 2026-03-25 - [Result-Set Denial-of-Service (DoS)]
+**Vulnerability:** Memory exhaustion and service degradation via extremely large search result sets.
+**Learning:** Even with strict input validation on query batch sizes and vector dimensions, an attacker can trigger a Denial-of-Service by requesting a high number of neighbors (`k`) across many queries. The combined result set can lead to massive memory consumption and prolonged JSON serialization times.
+**Prevention:** Enforce a strict upper limit on the *total* number of results (e.g., `len(queries) * k`) in the API validation layer. Additionally, optimize the backend to avoid loading unnecessary datasets (like full vectors) when performing metadata-only filtered searches.

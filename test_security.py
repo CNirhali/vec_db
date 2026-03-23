@@ -356,6 +356,20 @@ def test_storage_path_regex():
         assert response.status_code == 422
         assert "storage_path contains invalid characters" in response.text
 
+def test_search_result_limit():
+    headers = {"X-API-Key": API_KEY}
+    requests.post(f"{BASE_URL}/init", json={"dim": 1, "storage_path": "security_test.h5"}, headers=headers)
+
+    # Limit is 100,000. 101 queries * 1000 k = 101,000 results.
+    data = {
+        "queries": [[0.1]] * 101,
+        "k": 1000
+    }
+    response = requests.post(f"{BASE_URL}/search", json=data, headers=headers)
+    print(f"Search with 101k results: {response.status_code} {response.text}")
+    assert response.status_code == 422
+    assert "Total requested results (101000) exceeds limit of 100,000" in response.text
+
 if __name__ == "__main__":
     test_metrics_protected()
     test_status_protected()
@@ -373,4 +387,5 @@ if __name__ == "__main__":
     test_duplicate_ids()
     test_extreme_large_ids()
     test_storage_path_regex()
+    test_search_result_limit()
     print("ALL TESTS PASSED")
