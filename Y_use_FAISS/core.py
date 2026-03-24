@@ -46,14 +46,31 @@ class VectorDB:
         # Index search in hnswlib is thread-safe for reading
         labels, distances = self.index.search(queries, k)
         if filter_metadata is not None:
-            # Security: Optimize memory usage by only loading IDs and metadata, not the full vectors dataset
+            # Security: Optimize memory usage by only loading metadata for the ANN-returned results, not the full dataset
             with self.lock:
                 all_ids = self.storage.load_ids()
-                all_metadata = self.storage.load_metadata()
-            if all_metadata is None or len(all_ids) == 0:
-                id_to_meta = {}
-            else:
-                id_to_meta = {int(i): m for i, m in zip(all_ids, all_metadata)}
+                if len(all_ids) == 0:
+                    id_to_meta = {}
+                else:
+                    # Find the positions of returned labels in the storage to load specific metadata
+                    unique_labels = np.unique(labels)
+                    # Filter out any labels that might not be in storage (shouldn't happen if in sync)
+                    valid_mask = np.isin(unique_labels, all_ids)
+                    valid_labels = unique_labels[valid_mask]
+
+                    if len(valid_labels) == 0:
+                        id_to_meta = {}
+                    else:
+                        # Map labels to their indices in the storage efficiently
+                        indices_to_load = np.where(np.isin(all_ids, valid_labels))[0].tolist()
+
+                        loaded_metadata = self.storage.load_metadata(indices=indices_to_load)
+                        if loaded_metadata is None:
+                            id_to_meta = {}
+                        else:
+                            # Re-map loaded metadata back to their respective labels
+                            id_to_meta = {int(all_ids[idx]): meta
+                                         for idx, meta in zip(indices_to_load, loaded_metadata)}
 
             filtered_labels = []
             filtered_distances = []

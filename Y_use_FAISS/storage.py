@@ -96,11 +96,15 @@ class DiskStorage:
             meta_json = [json.dumps(m) for m in metadata]
             f.create_dataset('metadata', data=meta_json, maxshape=(None,), dtype=dt, chunks=True, compression='gzip')
 
-    def load_metadata(self):
-        """Load metadata array from disk."""
+    def load_metadata(self, indices=None):
+        """Load metadata array from disk, optionally filtered by indices."""
         with h5py.File(self.path, 'r') as f:
             if 'metadata' in f:
-                meta_json = f['metadata'][:]
+                if indices is not None:
+                    # Security: Load only specific metadata entries to prevent OOM
+                    meta_json = f['metadata'][indices]
+                else:
+                    meta_json = f['metadata'][:]
                 # Robustly decode metadata, handling both bytes and str
                 return [json.loads(m.decode('utf-8') if isinstance(m, bytes) else m) for m in meta_json]
             else:

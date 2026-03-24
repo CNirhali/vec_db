@@ -160,7 +160,7 @@ class SearchRequest(BaseModel):
         return v
 
 class DeleteRequest(BaseModel):
-    ids: List[int] = Field(..., max_length=10000)  # Security: Batch size limit
+    ids: List[int] = Field(..., min_length=1, max_length=10000)  # Security: Batch size limit
 
     @field_validator('ids')
     @classmethod
