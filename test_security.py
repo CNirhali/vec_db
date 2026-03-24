@@ -344,6 +344,16 @@ def test_extreme_large_ids():
     assert response.status_code == 422
     assert "IDs must not exceed 64-bit unsigned integer limit" in response.text
 
+def test_empty_delete():
+    headers = {"X-API-Key": API_KEY}
+    requests.post(f"{BASE_URL}/init", json={"dim": 2, "storage_path": "security_test.h5"}, headers=headers)
+
+    # Security: Ensure empty delete requests are rejected (min_length=1)
+    response = requests.post(f"{BASE_URL}/delete", json={"ids": []}, headers=headers)
+    print(f"Empty delete response: {response.status_code}")
+    assert response.status_code == 422
+    assert "List should have at least 1 item" in response.text
+
 def test_storage_path_regex():
     headers = {"X-API-Key": API_KEY}
 
@@ -386,6 +396,7 @@ if __name__ == "__main__":
     test_total_elements_limit()
     test_duplicate_ids()
     test_extreme_large_ids()
+    test_empty_delete()
     test_storage_path_regex()
     test_search_result_limit()
     print("ALL TESTS PASSED")

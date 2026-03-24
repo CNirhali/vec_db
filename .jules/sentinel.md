@@ -81,3 +81,8 @@
 **Vulnerability:** Memory exhaustion and service degradation via extremely large search result sets.
 **Learning:** Even with strict input validation on query batch sizes and vector dimensions, an attacker can trigger a Denial-of-Service by requesting a high number of neighbors (`k`) across many queries. The combined result set can lead to massive memory consumption and prolonged JSON serialization times.
 **Prevention:** Enforce a strict upper limit on the *total* number of results (e.g., `len(queries) * k`) in the API validation layer. Additionally, optimize the backend to avoid loading unnecessary datasets (like full vectors) when performing metadata-only filtered searches.
+
+## 2026-03-26 - [Memory-Optimized Metadata Filtering & Input Validation]
+**Vulnerability:** Denial-of-Service (OOM) during filtered searches and unnecessary processing of empty requests.
+**Learning:** Loading the entire metadata dataset into memory for post-filtering search results creates a significant memory-based DoS vector as the database grows. Furthermore, accepting empty batch requests for deletions leads to unnecessary Disk I/O and potential resource waste.
+**Prevention:** Implement indexed metadata loading by mapping search result labels to their positional indices in the HDF5 storage. Use Pydantic's `min_length=1` to enforce non-empty batches for destructive or resource-intensive API endpoints.
