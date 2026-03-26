@@ -58,9 +58,12 @@ if API_KEY == "supersecretkey":
 REQUEST_COUNT = Counter('vectordb_requests_total', 'Total API requests', ['endpoint', 'method'])
 REQUEST_LATENCY = Histogram('vectordb_request_latency_seconds', 'API request latency', ['endpoint', 'method'])
 
-def api_key_auth(x_api_key: Optional[str] = Header(None)):
+def api_key_auth(request: Request, x_api_key: Optional[str] = Header(None)):
     # Security: Return 401 instead of 422 if key is missing, and use compare_digest to prevent timing attacks
     if x_api_key is None or not secrets.compare_digest(x_api_key, API_KEY):
+        # Security: Log failed authentication attempts for auditing and threat detection
+        client_ip = request.client.host if request.client else "unknown"
+        logger.warning("auth_failed", client_ip=client_ip, reason="missing_or_invalid_key")
         raise HTTPException(status_code=401, detail="Invalid or missing API Key")
 
 class InitRequest(BaseModel):
