@@ -86,3 +86,8 @@
 **Vulnerability:** Denial-of-Service (OOM) during filtered searches and unnecessary processing of empty requests.
 **Learning:** Loading the entire metadata dataset into memory for post-filtering search results creates a significant memory-based DoS vector as the database grows. Furthermore, accepting empty batch requests for deletions leads to unnecessary Disk I/O and potential resource waste.
 **Prevention:** Implement indexed metadata loading by mapping search result labels to their positional indices in the HDF5 storage. Use Pydantic's `min_length=1` to enforce non-empty batches for destructive or resource-intensive API endpoints.
+
+## 2026-03-27 - [Global Exception Handling & Information Leakage]
+**Vulnerability:** Information leakage and fragile error state via unhandled system-level exceptions (OSError, RuntimeError).
+**Learning:** Relying on per-endpoint exception handling is prone to omissions as the API grows. Unhandled system-level exceptions from underlying libraries like `h5py` or `hnswlib` can result in 500 Internal Server Errors that leak internal details (stack traces, file paths) to the client. Using a global exception handler ensures a consistent, secure failure mode across the entire application.
+**Prevention:** Implement global exception handlers for `OSError` and `RuntimeError` that log the full error context internally but return a generic, secure `JSONResponse` with a 500 status code to the client. This maintains security without sacrificing observability.

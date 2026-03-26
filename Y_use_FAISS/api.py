@@ -12,10 +12,28 @@ import inspect
 from .core import VectorDB
 import structlog
 from prometheus_client import Counter, Histogram, generate_latest
-from fastapi.responses import Response
+from fastapi.responses import Response, JSONResponse
 
 app = FastAPI()
 db = None
+
+@app.exception_handler(OSError)
+async def os_error_handler(request: Request, exc: OSError):
+    # Security: Catch system-level errors and return a generic 500 error to prevent information leakage
+    logger.error("os_error", exc_info=exc, path=request.url.path)
+    return JSONResponse(
+        content={"detail": "A storage-related error occurred. Please ensure the database is properly initialized and the storage path is accessible."},
+        status_code=500
+    )
+
+@app.exception_handler(RuntimeError)
+async def runtime_error_handler(request: Request, exc: RuntimeError):
+    # Security: Catch indexing-level errors and return a generic 500 error to prevent internal detail leakage
+    logger.error("runtime_error", exc_info=exc, path=request.url.path)
+    return JSONResponse(
+        content={"detail": "An internal indexing error occurred. The operation could not be completed securely."},
+        status_code=500
+    )
 
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
@@ -238,11 +256,10 @@ def init_db(req: InitRequest, x_api_key: str = Depends(api_key_auth)):
     global db
     try:
         db = VectorDB(req.dim, req.storage_path, ef_construction=req.ef_construction, M=req.M, ef_search=req.ef_search)
-    except (ValueError, OSError) as e:
-        # Security: Handle dimension mismatch or file-related errors as 400 Bad Request to avoid 500/Internal Server Error
-        # Use a generic message for OSError to prevent path/system detail leakage
-        detail = str(e) if isinstance(e, ValueError) else "Storage initialization failed. Please check the provided path and file permissions."
-        raise HTTPException(status_code=400, detail=detail)
+    except ValueError as e:
+        # Security: Specific 400 for dimension mismatch or invalid parameters to avoid 500 error
+        raise HTTPException(status_code=400, detail=str(e))
+    # Security: OSError and RuntimeError are handled by global exception handlers
     return {"status": "initialized", "dim": req.dim, "storage_path": req.storage_path, "ef_construction": req.ef_construction, "M": req.M, "ef_search": req.ef_search}
 
 @app.post("/add")

@@ -358,7 +358,7 @@ def test_storage_path_regex():
     headers = {"X-API-Key": API_KEY}
 
     # Test invalid character in storage_path
-    invalid_paths = ["test;.h5", "test\$.h5", "test>test.h5", "test|test.h5", "test .h5"]
+    invalid_paths = ["test;.h5", r"test\$.h5", "test>test.h5", "test|test.h5", "test .h5"]
     for path in invalid_paths:
         data = {"dim": 128, "storage_path": path}
         response = requests.post(f"{BASE_URL}/init", json=data, headers=headers)
