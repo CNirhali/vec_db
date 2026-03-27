@@ -1,5 +1,8 @@
 from fastapi import FastAPI, HTTPException, Header, Depends, Request
 from fastapi.concurrency import run_in_threadpool
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 from pydantic import BaseModel, field_validator, Field, model_validator
 from typing import List, Optional, Any
 import numpy as np
@@ -16,6 +19,11 @@ from fastapi.responses import Response, JSONResponse
 
 app = FastAPI()
 db = None
+
+# Security: Initialize rate limiter to protect against DoS and brute-force attacks
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 @app.exception_handler(OSError)
 async def os_error_handler(request: Request, exc: OSError):
@@ -234,7 +242,8 @@ class UpdateRequest(BaseModel):
         return self
 
 @app.get("/metrics")
-def metrics(x_api_key: str = Depends(api_key_auth)):
+@limiter.limit("200/minute")
+def metrics(request: Request, x_api_key: str = Depends(api_key_auth)):
     return Response(generate_latest(), media_type="text/plain")
 
 def instrument(endpoint):
@@ -254,8 +263,9 @@ def instrument(endpoint):
     return decorator
 
 @app.post("/init")
+@limiter.limit("5/minute")
 @instrument("/init")
-def init_db(req: InitRequest, x_api_key: str = Depends(api_key_auth)):
+def init_db(request: Request, req: InitRequest, x_api_key: str = Depends(api_key_auth)):
     global db
     try:
         db = VectorDB(req.dim, req.storage_path, ef_construction=req.ef_construction, M=req.M, ef_search=req.ef_search)
@@ -266,8 +276,9 @@ def init_db(req: InitRequest, x_api_key: str = Depends(api_key_auth)):
     return {"status": "initialized", "dim": req.dim, "storage_path": req.storage_path, "ef_construction": req.ef_construction, "M": req.M, "ef_search": req.ef_search}
 
 @app.post("/add")
+@limiter.limit("100/minute")
 @instrument("/add")
-def add_vectors(req: AddRequest, x_api_key: str = Depends(api_key_auth)):
+def add_vectors(request: Request, req: AddRequest, x_api_key: str = Depends(api_key_auth)):
     if db is None:
         raise HTTPException(status_code=400, detail="DB not initialized")
     try:
@@ -287,8 +298,9 @@ def add_vectors(req: AddRequest, x_api_key: str = Depends(api_key_auth)):
     return {"status": "ok", "count": len(vectors)}
 
 @app.post("/search")
+@limiter.limit("100/minute")
 @instrument("/search")
-def search_vectors(req: SearchRequest, x_api_key: str = Depends(api_key_auth)):
+def search_vectors(request: Request, req: SearchRequest, x_api_key: str = Depends(api_key_auth)):
     if db is None:
         raise HTTPException(status_code=400, detail="DB not initialized")
     try:
@@ -309,16 +321,18 @@ def search_vectors(req: SearchRequest, x_api_key: str = Depends(api_key_auth)):
     return {"labels": labels.tolist(), "distances": distances.tolist()}
 
 @app.post("/delete")
+@limiter.limit("100/minute")
 @instrument("/delete")
-def delete_vectors(req: DeleteRequest, x_api_key: str = Depends(api_key_auth)):
+def delete_vectors(request: Request, req: DeleteRequest, x_api_key: str = Depends(api_key_auth)):
     if db is None:
         raise HTTPException(status_code=400, detail="DB not initialized")
     db.delete(req.ids)
     return {"status": "ok", "deleted": len(req.ids)}
 
 @app.post("/update")
+@limiter.limit("100/minute")
 @instrument("/update")
-def update_vectors(req: UpdateRequest, x_api_key: str = Depends(api_key_auth)):
+def update_vectors(request: Request, req: UpdateRequest, x_api_key: str = Depends(api_key_auth)):
     if db is None:
         raise HTTPException(status_code=400, detail="DB not initialized")
     try:
@@ -338,14 +352,16 @@ def update_vectors(req: UpdateRequest, x_api_key: str = Depends(api_key_auth)):
     return {"status": "ok", "updated": len(req.ids)}
 
 @app.post("/save")
+@limiter.limit("100/minute")
 @instrument("/save")
-def save_db(x_api_key: str = Depends(api_key_auth)):
+def save_db(request: Request, x_api_key: str = Depends(api_key_auth)):
     if db is None:
         raise HTTPException(status_code=400, detail="DB not initialized")
     db.save()
     return {"status": "ok", "message": "Index saved to disk"}
 
 @app.get("/status")
+@limiter.limit("200/minute")
 @instrument("/status")
-def status(x_api_key: str = Depends(api_key_auth)):
+def status(request: Request, x_api_key: str = Depends(api_key_auth)):
     return {"status": "ok", "db_initialized": db is not None}
