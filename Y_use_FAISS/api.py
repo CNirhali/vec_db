@@ -20,6 +20,9 @@ from fastapi.responses import Response, JSONResponse
 app = FastAPI()
 db = None
 
+# Security: Limit request body size to 150MB to prevent memory-based DoS
+MAX_REQUEST_BODY_SIZE = 150 * 1024 * 1024
+
 # Security: Initialize rate limiter to protect against DoS and brute-force attacks
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
@@ -45,6 +48,14 @@ async def runtime_error_handler(request: Request, exc: RuntimeError):
 
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
+    # Security: Enforce request body size limit to prevent memory-based DoS
+    content_length = request.headers.get("Content-Length")
+    if content_length and int(content_length) > MAX_REQUEST_BODY_SIZE:
+        return JSONResponse(
+            content={"detail": "Payload Too Large. Maximum allowed size is 150MB."},
+            status_code=413
+        )
+
     # Security: Defense-in-depth by adding security headers
     response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
@@ -120,7 +131,7 @@ class AddRequest(BaseModel):
                 if vector_id > 18446744073709551615:
                     raise ValueError("IDs must not exceed 64-bit unsigned integer limit (18446744073709551615)")
         return v
-    metadata: Optional[List[dict]] = None
+    metadata: Optional[List[dict]] = Field(None, max_length=10000)
 
     @field_validator('metadata')
     @classmethod
