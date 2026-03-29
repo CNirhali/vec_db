@@ -91,3 +91,8 @@
 **Vulnerability:** Information leakage and fragile error state via unhandled system-level exceptions (OSError, RuntimeError).
 **Learning:** Relying on per-endpoint exception handling is prone to omissions as the API grows. Unhandled system-level exceptions from underlying libraries like `h5py` or `hnswlib` can result in 500 Internal Server Errors that leak internal details (stack traces, file paths) to the client. Using a global exception handler ensures a consistent, secure failure mode across the entire application.
 **Prevention:** Implement global exception handlers for `OSError` and `RuntimeError` that log the full error context internally but return a generic, secure `JSONResponse` with a 500 status code to the client. This maintains security without sacrificing observability.
+
+## 2026-03-29 - [Global Auth & Non-Root Container Security]
+**Vulnerability:** Information leakage of API schema to unauthenticated users and root-level container execution risk.
+**Learning:** In FastAPI, placing `Depends(api_key_auth)` in individual endpoint signatures allows Pydantic to perform body validation *before* the authentication dependency is resolved. This can leak schema details (via 422 errors) to unauthenticated attackers. Furthermore, running the container as root provides an unnecessarily large attack surface.
+**Prevention:** Enforce authentication globally using `app = FastAPI(dependencies=[Depends(api_key_auth)])` to ensure it runs before body parsing. Implement a non-privileged system user in the `Dockerfile` and use `COPY --chown` to maintain the Principle of Least Privilege.

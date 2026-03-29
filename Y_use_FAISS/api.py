@@ -17,7 +17,24 @@ import structlog
 from prometheus_client import Counter, Histogram, generate_latest
 from fastapi.responses import Response, JSONResponse
 
-app = FastAPI()
+# Security: Load API Key from environment variable, default for dev
+API_KEY = os.getenv("API_KEY", "supersecretkey")
+
+logger = structlog.get_logger()
+
+if API_KEY == "supersecretkey":
+    logger.warning("Using default insecure API_KEY. Please set API_KEY environment variable in production.")
+
+def api_key_auth(request: Request, x_api_key: Optional[str] = Header(None)):
+    # Security: Return 401 instead of 422 if key is missing, and use compare_digest to prevent timing attacks
+    if x_api_key is None or not secrets.compare_digest(x_api_key, API_KEY):
+        # Security: Log failed authentication attempts for auditing and threat detection
+        client_ip = request.client.host if request.client else "unknown"
+        logger.warning("auth_failed", client_ip=client_ip, reason="missing_or_invalid_key")
+        raise HTTPException(status_code=401, detail="Invalid or missing API Key")
+
+# Security: Enforce authentication globally to prevent information leakage about the API schema to unauthenticated users
+app = FastAPI(dependencies=[Depends(api_key_auth)])
 db = None
 
 # Security: Limit request body size to 150MB to prevent memory-based DoS
@@ -66,24 +83,9 @@ async def add_security_headers(request: Request, call_next):
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["X-Permitted-Cross-Domain-Policies"] = "none"
     return response
-# Security: Load API Key from environment variable, default for dev
-API_KEY = os.getenv("API_KEY", "supersecretkey")
-
-logger = structlog.get_logger()
-
-if API_KEY == "supersecretkey":
-    logger.warning("Using default insecure API_KEY. Please set API_KEY environment variable in production.")
 
 REQUEST_COUNT = Counter('vectordb_requests_total', 'Total API requests', ['endpoint', 'method'])
 REQUEST_LATENCY = Histogram('vectordb_request_latency_seconds', 'API request latency', ['endpoint', 'method'])
-
-def api_key_auth(request: Request, x_api_key: Optional[str] = Header(None)):
-    # Security: Return 401 instead of 422 if key is missing, and use compare_digest to prevent timing attacks
-    if x_api_key is None or not secrets.compare_digest(x_api_key, API_KEY):
-        # Security: Log failed authentication attempts for auditing and threat detection
-        client_ip = request.client.host if request.client else "unknown"
-        logger.warning("auth_failed", client_ip=client_ip, reason="missing_or_invalid_key")
-        raise HTTPException(status_code=401, detail="Invalid or missing API Key")
 
 class InitRequest(BaseModel):
     dim: int = Field(..., gt=0, le=10000)  # Security: Limit dimension to prevent excessive memory usage
@@ -254,7 +256,7 @@ class UpdateRequest(BaseModel):
 
 @app.get("/metrics")
 @limiter.limit("200/minute")
-def metrics(request: Request, x_api_key: str = Depends(api_key_auth)):
+def metrics(request: Request):
     return Response(generate_latest(), media_type="text/plain")
 
 def instrument(endpoint):
@@ -276,7 +278,7 @@ def instrument(endpoint):
 @app.post("/init")
 @limiter.limit("5/minute")
 @instrument("/init")
-def init_db(request: Request, req: InitRequest, x_api_key: str = Depends(api_key_auth)):
+def init_db(request: Request, req: InitRequest):
     global db
     try:
         db = VectorDB(req.dim, req.storage_path, ef_construction=req.ef_construction, M=req.M, ef_search=req.ef_search)
@@ -289,7 +291,7 @@ def init_db(request: Request, req: InitRequest, x_api_key: str = Depends(api_key
 @app.post("/add")
 @limiter.limit("100/minute")
 @instrument("/add")
-def add_vectors(request: Request, req: AddRequest, x_api_key: str = Depends(api_key_auth)):
+def add_vectors(request: Request, req: AddRequest):
     if db is None:
         raise HTTPException(status_code=400, detail="DB not initialized")
     try:
@@ -311,7 +313,7 @@ def add_vectors(request: Request, req: AddRequest, x_api_key: str = Depends(api_
 @app.post("/search")
 @limiter.limit("100/minute")
 @instrument("/search")
-def search_vectors(request: Request, req: SearchRequest, x_api_key: str = Depends(api_key_auth)):
+def search_vectors(request: Request, req: SearchRequest):
     if db is None:
         raise HTTPException(status_code=400, detail="DB not initialized")
     try:
@@ -334,7 +336,7 @@ def search_vectors(request: Request, req: SearchRequest, x_api_key: str = Depend
 @app.post("/delete")
 @limiter.limit("100/minute")
 @instrument("/delete")
-def delete_vectors(request: Request, req: DeleteRequest, x_api_key: str = Depends(api_key_auth)):
+def delete_vectors(request: Request, req: DeleteRequest):
     if db is None:
         raise HTTPException(status_code=400, detail="DB not initialized")
     db.delete(req.ids)
@@ -343,7 +345,7 @@ def delete_vectors(request: Request, req: DeleteRequest, x_api_key: str = Depend
 @app.post("/update")
 @limiter.limit("100/minute")
 @instrument("/update")
-def update_vectors(request: Request, req: UpdateRequest, x_api_key: str = Depends(api_key_auth)):
+def update_vectors(request: Request, req: UpdateRequest):
     if db is None:
         raise HTTPException(status_code=400, detail="DB not initialized")
     try:
@@ -365,7 +367,7 @@ def update_vectors(request: Request, req: UpdateRequest, x_api_key: str = Depend
 @app.post("/save")
 @limiter.limit("100/minute")
 @instrument("/save")
-def save_db(request: Request, x_api_key: str = Depends(api_key_auth)):
+def save_db(request: Request):
     if db is None:
         raise HTTPException(status_code=400, detail="DB not initialized")
     db.save()
@@ -374,5 +376,5 @@ def save_db(request: Request, x_api_key: str = Depends(api_key_auth)):
 @app.get("/status")
 @limiter.limit("200/minute")
 @instrument("/status")
-def status(request: Request, x_api_key: str = Depends(api_key_auth)):
+def status(request: Request):
     return {"status": "ok", "db_initialized": db is not None}
