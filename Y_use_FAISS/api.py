@@ -100,9 +100,9 @@ class InitRequest(BaseModel):
         # Security: Prevent path traversal and restrict file extensions
         if ".." in v or os.path.isabs(v) or v.startswith("/") or v.startswith("\\"):
             raise ValueError("storage_path must be a relative path and cannot contain '..'")
-        # Security: Defense-in-depth via regex validation for safe characters
-        if not re.match(r"^[a-zA-Z0-9_\-\./]+$", v):
-            raise ValueError("storage_path contains invalid characters")
+        # Security: Defense-in-depth via regex validation for safe characters, forbidding directory separators
+        if not re.match(r"^[a-zA-Z0-9_\-\.]+$", v):
+            raise ValueError("storage_path contains invalid characters or directory separators")
         if not (v.endswith(".h5") or v.endswith(".hdf5")):
             raise ValueError("storage_path must have a .h5 or .hdf5 extension")
         return v

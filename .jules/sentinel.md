@@ -96,3 +96,8 @@
 **Vulnerability:** Information leakage of API schema to unauthenticated users and root-level container execution risk.
 **Learning:** In FastAPI, placing `Depends(api_key_auth)` in individual endpoint signatures allows Pydantic to perform body validation *before* the authentication dependency is resolved. This can leak schema details (via 422 errors) to unauthenticated attackers. Furthermore, running the container as root provides an unnecessarily large attack surface.
 **Prevention:** Enforce authentication globally using `app = FastAPI(dependencies=[Depends(api_key_auth)])` to ensure it runs before body parsing. Implement a non-privileged system user in the `Dockerfile` and use `COPY --chown` to maintain the Principle of Least Privilege.
+
+## 2026-03-31 - [Subdirectory Injection via Path Whitelist]
+**Vulnerability:** File creation/overwrite in arbitrary subdirectories via allowed directory separators in path whitelist.
+**Learning:** Whitelisting characters like `/` in a `storage_path` allows attackers to escape the intended "flat" storage directory and interact with other parts of the filesystem (e.g., application code or configuration directories) if they exist. Even if `..` is blocked, subdirectory injection can still lead to unauthorized file manipulation.
+**Prevention:** For stateful applications managing their own storage, enforce a flat file structure by strictly forbidding directory separators (`/`, `\`) in user-provided filenames.
