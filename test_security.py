@@ -354,11 +354,23 @@ def test_empty_delete():
     assert response.status_code == 422
     assert "List should have at least 1 item" in response.text
 
+def test_storage_path_injection():
+    # Security: Ensure subdirectories are not allowed in storage_path to prevent path injection
+    headers = {"X-API-Key": API_KEY}
+    data = {
+        "dim": 128,
+        "storage_path": "subdir/test.h5"
+    }
+    response = requests.post(f"{BASE_URL}/init", json=data, headers=headers)
+    print(f"Init with subdir/test.h5: {response.status_code} {response.text}")
+    assert response.status_code == 422
+    assert "storage_path contains invalid characters or directory separators" in response.text
+
 def test_storage_path_regex():
     headers = {"X-API-Key": API_KEY}
 
     # Test invalid character in storage_path
-    invalid_paths = ["test;.h5", r"test\$.h5", "test>test.h5", "test|test.h5", "test .h5"]
+    invalid_paths = ["test;.h5", r"test\$.h5", "test>test.h5", "test|test.h5", "test .h5", "subdir/test.h5"]
     for path in invalid_paths:
         data = {"dim": 128, "storage_path": path}
         response = requests.post(f"{BASE_URL}/init", json=data, headers=headers)
@@ -397,6 +409,7 @@ if __name__ == "__main__":
     test_duplicate_ids()
     test_extreme_large_ids()
     test_empty_delete()
+    test_storage_path_injection()
     test_storage_path_regex()
     test_search_result_limit()
     print("ALL TESTS PASSED")
