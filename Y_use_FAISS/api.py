@@ -33,8 +33,14 @@ def api_key_auth(request: Request, x_api_key: Optional[str] = Header(None)):
         logger.warning("auth_failed", client_ip=client_ip, reason="missing_or_invalid_key")
         raise HTTPException(status_code=401, detail="Invalid or missing API Key")
 
-# Security: Enforce authentication globally to prevent information leakage about the API schema to unauthenticated users
-app = FastAPI(dependencies=[Depends(api_key_auth)])
+# Security: Enforce authentication globally to prevent information leakage about the API schema to unauthenticated users.
+# We also disable the default /docs, /redoc, and /openapi.json endpoints to prevent schema discovery by unauthenticated users.
+app = FastAPI(
+    dependencies=[Depends(api_key_auth)],
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None
+)
 db = None
 
 # Security: Limit request body size to 150MB to prevent memory-based DoS

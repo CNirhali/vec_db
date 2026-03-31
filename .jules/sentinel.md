@@ -101,3 +101,8 @@
 **Vulnerability:** File creation/overwrite in arbitrary subdirectories via allowed directory separators in path whitelist.
 **Learning:** Whitelisting characters like `/` in a `storage_path` allows attackers to escape the intended "flat" storage directory and interact with other parts of the filesystem (e.g., application code or configuration directories) if they exist. Even if `..` is blocked, subdirectory injection can still lead to unauthorized file manipulation.
 **Prevention:** For stateful applications managing their own storage, enforce a flat file structure by strictly forbidding directory separators (`/`, `\`) in user-provided filenames.
+
+## 2026-04-02 - [FastAPI Schema Discovery & Information Leakage]
+**Vulnerability:** Exposure of API schema and documentation to unauthenticated users.
+**Learning:** In FastAPI, default documentation endpoints (`/docs`, `/redoc`) and the OpenAPI specification (`/openapi.json`) are enabled by default and are not automatically covered by global dependencies that require authentication if they are mounted before the dependency is evaluated. This allows unauthenticated attackers to discover the full API structure, models, and validation rules, facilitating the crafting of more targeted attacks.
+**Prevention:** Explicitly disable documentation endpoints in production environments by setting `docs_url=None`, `redoc_url=None`, and `openapi_url=None` in the `FastAPI` constructor unless they are specifically required and protected by an additional authentication layer.
