@@ -392,6 +392,15 @@ def test_search_result_limit():
     assert response.status_code == 422
     assert "Total requested results (101000) exceeds limit of 100,000" in response.text
 
+def test_docs_disabled():
+    # Security: Ensure documentation endpoints are disabled to prevent schema discovery
+    endpoints = ["/docs", "/openapi.json", "/redoc"]
+    for ep in endpoints:
+        resp = requests.get(f"{BASE_URL}{ep}")
+        print(f"{ep} status: {resp.status_code}")
+        # When disabled in FastAPI, these should return 404
+        assert resp.status_code == 404
+
 if __name__ == "__main__":
     test_metrics_protected()
     test_status_protected()
@@ -412,4 +421,5 @@ if __name__ == "__main__":
     test_storage_path_injection()
     test_storage_path_regex()
     test_search_result_limit()
+    test_docs_disabled()
     print("ALL TESTS PASSED")
