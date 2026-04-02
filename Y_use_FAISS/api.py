@@ -30,18 +30,21 @@ if API_KEY == "supersecretkey":
 limiter = Limiter(key_func=get_remote_address)
 
 # Security: Define rate limit for failed authentication attempts to prevent brute-force attacks
+# Security: Define a specific limit for failed authentication attempts to prevent brute-force attacks
 AUTH_FAILURE_LIMIT = parse("10/minute")
 
 def api_key_auth(request: Request, x_api_key: Optional[str] = Header(None)):
     # Security: Return 401 instead of 422 if key is missing, and use compare_digest to prevent timing attacks
     if x_api_key is None or not secrets.compare_digest(x_api_key, API_KEY):
         # Security: Log failed authentication attempts for auditing and threat detection
-        client_ip = request.client.host if request.client else "unknown"
+        client_ip = get_remote_address(request)
         logger.warning("auth_failed", client_ip=client_ip, reason="missing_or_invalid_key")
 
         # Security: Implement brute-force protection using manual rate limiting for failed auth attempts
         if not limiter.limiter.hit(AUTH_FAILURE_LIMIT, client_ip):
             logger.warning("auth_brute_force_detected", client_ip=client_ip)
+        # Security: Throttling failed authentication attempts to mitigate brute-force risks
+        if not limiter.limiter.hit(AUTH_FAILURE_LIMIT, client_ip):
             raise HTTPException(status_code=429, detail="Too many failed authentication attempts. Please try again later.")
 
         raise HTTPException(status_code=401, detail="Invalid or missing API Key")
