@@ -7,7 +7,8 @@ API_KEY = "supersecretkey"
 def test_metrics_protected():
     response = requests.get(f"{BASE_URL}/metrics")
     print(f"/metrics status (no key): {response.status_code}")
-    assert response.status_code == 401
+    # Security: After implementing auth brute-force protection, this may return 429 if the IP is throttled
+    assert response.status_code in [401, 429]
 
     response = requests.get(f"{BASE_URL}/metrics", headers={"X-API-Key": API_KEY})
     print(f"/metrics status (with key): {response.status_code}")
@@ -16,7 +17,8 @@ def test_metrics_protected():
 def test_status_protected():
     response = requests.get(f"{BASE_URL}/status")
     print(f"/status status (no key): {response.status_code}")
-    assert response.status_code == 401
+    # Security: After implementing auth brute-force protection, this may return 429 if the IP is throttled
+    assert response.status_code in [401, 429]
 
     response = requests.get(f"{BASE_URL}/status", headers={"X-API-Key": API_KEY})
     print(f"/status status (with key): {response.status_code}")
