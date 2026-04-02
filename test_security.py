@@ -16,11 +16,26 @@ def test_metrics_protected():
 def test_status_protected():
     response = requests.get(f"{BASE_URL}/status")
     print(f"/status status (no key): {response.status_code}")
-    assert response.status_code == 401
+    # Security: It could be 401 or 429 depending on previous tests, but here we expect 401 if it's the first test
+    assert response.status_code in [401, 429]
 
     response = requests.get(f"{BASE_URL}/status", headers={"X-API-Key": API_KEY})
     print(f"/status status (with key): {response.status_code}")
     assert response.status_code == 200
+
+def test_auth_brute_force():
+    # Security: Verify that multiple failed auth attempts lead to a 429 response
+    print("Testing API key brute-force protection (10/minute)...")
+    status_codes = []
+    for i in range(15):
+        response = requests.get(f"{BASE_URL}/status", headers={"X-API-Key": "wrong-key"})
+        status_codes.append(response.status_code)
+        if response.status_code == 429:
+            print(f"Brute-force protection hit at attempt {i+1}")
+            break
+
+    assert 401 in status_codes
+    assert 429 in status_codes
 
 def test_path_traversal():
     # Try to init with an absolute path
@@ -404,6 +419,7 @@ def test_docs_disabled():
 if __name__ == "__main__":
     test_metrics_protected()
     test_status_protected()
+    test_auth_brute_force()
     test_path_traversal()
     test_dos_k_parameter()
     test_dos_protection_limits()

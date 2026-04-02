@@ -3,6 +3,7 @@ from fastapi.concurrency import run_in_threadpool
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+from limits import parse
 from pydantic import BaseModel, field_validator, Field, model_validator
 from typing import List, Optional, Any
 import numpy as np
@@ -25,12 +26,24 @@ logger = structlog.get_logger()
 if API_KEY == "supersecretkey":
     logger.warning("Using default insecure API_KEY. Please set API_KEY environment variable in production.")
 
+# Security: Initialize rate limiter to protect against DoS and brute-force attacks
+limiter = Limiter(key_func=get_remote_address)
+
+# Security: Define rate limit for failed authentication attempts to prevent brute-force attacks
+AUTH_FAILURE_LIMIT = parse("10/minute")
+
 def api_key_auth(request: Request, x_api_key: Optional[str] = Header(None)):
     # Security: Return 401 instead of 422 if key is missing, and use compare_digest to prevent timing attacks
     if x_api_key is None or not secrets.compare_digest(x_api_key, API_KEY):
         # Security: Log failed authentication attempts for auditing and threat detection
         client_ip = request.client.host if request.client else "unknown"
         logger.warning("auth_failed", client_ip=client_ip, reason="missing_or_invalid_key")
+
+        # Security: Implement brute-force protection using manual rate limiting for failed auth attempts
+        if not limiter.limiter.hit(AUTH_FAILURE_LIMIT, client_ip):
+            logger.warning("auth_brute_force_detected", client_ip=client_ip)
+            raise HTTPException(status_code=429, detail="Too many failed authentication attempts. Please try again later.")
+
         raise HTTPException(status_code=401, detail="Invalid or missing API Key")
 
 # Security: Enforce authentication globally to prevent information leakage about the API schema to unauthenticated users.
@@ -46,8 +59,6 @@ db = None
 # Security: Limit request body size to 150MB to prevent memory-based DoS
 MAX_REQUEST_BODY_SIZE = 150 * 1024 * 1024
 
-# Security: Initialize rate limiter to protect against DoS and brute-force attacks
-limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
