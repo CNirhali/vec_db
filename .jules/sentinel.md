@@ -106,3 +106,8 @@
 **Vulnerability:** Exposure of API schema and documentation to unauthenticated users.
 **Learning:** In FastAPI, default documentation endpoints (`/docs`, `/redoc`) and the OpenAPI specification (`/openapi.json`) are enabled by default and are not automatically covered by global dependencies that require authentication if they are mounted before the dependency is evaluated. This allows unauthenticated attackers to discover the full API structure, models, and validation rules, facilitating the crafting of more targeted attacks.
 **Prevention:** Explicitly disable documentation endpoints in production environments by setting `docs_url=None`, `redoc_url=None`, and `openapi_url=None` in the `FastAPI` constructor unless they are specifically required and protected by an additional authentication layer.
+
+## 2026-04-05 - [API Key Brute-Force Protection]
+**Vulnerability:** Lack of rate limiting on failed authentication attempts allowed for potential API key brute-force attacks.
+**Learning:** Global authentication dependencies in FastAPI run before route-specific rate limit decorators. If authentication fails, the request is rejected before the standard rate limiter can track it, leaving the authentication mechanism unprotected from brute-force attempts.
+**Prevention:** Implement manual rate limiting within the authentication dependency using `limiter.limiter.hit()`. This ensures that even failed attempts are tracked and throttled, providing defense-in-depth for the API's entry point.

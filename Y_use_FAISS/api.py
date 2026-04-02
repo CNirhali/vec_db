@@ -29,6 +29,7 @@ if API_KEY == "supersecretkey":
 # Security: Initialize rate limiter to protect against DoS and brute-force attacks
 limiter = Limiter(key_func=get_remote_address)
 
+# Security: Define rate limit for failed authentication attempts to prevent brute-force attacks
 # Security: Define a specific limit for failed authentication attempts to prevent brute-force attacks
 AUTH_FAILURE_LIMIT = parse("10/minute")
 
@@ -39,6 +40,9 @@ def api_key_auth(request: Request, x_api_key: Optional[str] = Header(None)):
         client_ip = get_remote_address(request)
         logger.warning("auth_failed", client_ip=client_ip, reason="missing_or_invalid_key")
 
+        # Security: Implement brute-force protection using manual rate limiting for failed auth attempts
+        if not limiter.limiter.hit(AUTH_FAILURE_LIMIT, client_ip):
+            logger.warning("auth_brute_force_detected", client_ip=client_ip)
         # Security: Throttling failed authentication attempts to mitigate brute-force risks
         if not limiter.limiter.hit(AUTH_FAILURE_LIMIT, client_ip):
             raise HTTPException(status_code=429, detail="Too many failed authentication attempts. Please try again later.")
