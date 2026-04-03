@@ -20,6 +20,9 @@ class VectorDB:
 
         self.index = HNSWIndex(dim, ef_construction=ef_construction, M=M, ef_search=ef_search)
         self.lock = threading.Lock()
+        # Security: Maintain in-memory ID-to-position mapping for efficient O(1) collision checks and metadata filtering.
+        # This prevents Denial-of-Service (DoS) by avoiding O(N) disk scans or large vector operations during search.
+        self.id_to_pos = {}
 
         # Security: Derive index path from storage path and attempt recovery
         self.index_path = os.path.splitext(storage_path)[0] + ".bin"
@@ -29,48 +32,54 @@ class VectorDB:
         """Load index from disk or rebuild from storage if missing."""
         if os.path.exists(self.index_path):
             self.index.load(self.index_path)
+            # Rebuild ID-to-position mapping from storage
+            all_ids = self.storage.load_ids()
+            self.id_to_pos = {int(v_id): i for i, v_id in enumerate(all_ids)}
         elif os.path.exists(self.storage.path):
             # Security: Rebuild index from storage if bin file is missing but data exists
             vectors, ids, _ = self.storage.load_vectors()
             if len(vectors) > 0:
                 self.index.add(vectors, ids)
+                self.id_to_pos = {int(v_id): i for i, v_id in enumerate(ids)}
 
     def add(self, vectors, ids=None, metadata=None):
         """Add vectors (numpy array), optional ids, and optional metadata to the DB."""
         with self.lock:
+            if ids is not None:
+                # Security: Prevent cross-tenant data leakage and index corruption by ensuring provided IDs are unique and do not already exist.
+                # Use O(1) in-memory hash map for collision checks instead of I/O heavy storage lookups.
+                if any(int(v_id) in self.id_to_pos for v_id in ids):
+                    raise ValueError("One or more provided IDs already exist in the database. Use the /update endpoint to modify existing vectors.")
+
             ids = self.index.add(vectors, ids)
             self.storage.save_vectors(vectors, ids, metadata)
+
+            # Update mapping with new vector positions
+            current_count = len(self.id_to_pos)
+            for i, v_id in enumerate(ids):
+                self.id_to_pos[int(v_id)] = current_count + i
 
     def search(self, queries, k=10, filter_metadata=None):
         """Search for k nearest neighbors for each query vector, optionally filter by metadata."""
         # Index search in hnswlib is thread-safe for reading
         labels, distances = self.index.search(queries, k)
         if filter_metadata is not None:
-            # Security: Optimize memory usage by only loading metadata for the ANN-returned results, not the full dataset
+            # Security: Optimize memory usage by only loading metadata for the ANN-returned results.
+            # Using self.id_to_pos avoids O(N) disk scans or large vectorized operations on all IDs, mitigating a major DoS vector.
             with self.lock:
-                all_ids = self.storage.load_ids()
-                if len(all_ids) == 0:
+                # Map unique labels to their positional indices in storage
+                unique_labels = np.unique(labels)
+                valid_labels = [int(l) for l in unique_labels if int(l) in self.id_to_pos]
+
+                if not valid_labels:
                     id_to_meta = {}
                 else:
-                    # Find the positions of returned labels in the storage to load specific metadata
-                    unique_labels = np.unique(labels)
-                    # Filter out any labels that might not be in storage (shouldn't happen if in sync)
-                    valid_mask = np.isin(unique_labels, all_ids)
-                    valid_labels = unique_labels[valid_mask]
-
-                    if len(valid_labels) == 0:
+                    indices_to_load = [self.id_to_pos[l] for l in valid_labels]
+                    loaded_metadata = self.storage.load_metadata(indices=indices_to_load)
+                    if loaded_metadata is None:
                         id_to_meta = {}
                     else:
-                        # Map labels to their indices in the storage efficiently
-                        indices_to_load = np.where(np.isin(all_ids, valid_labels))[0].tolist()
-
-                        loaded_metadata = self.storage.load_metadata(indices=indices_to_load)
-                        if loaded_metadata is None:
-                            id_to_meta = {}
-                        else:
-                            # Re-map loaded metadata back to their respective labels
-                            id_to_meta = {int(all_ids[idx]): meta
-                                         for idx, meta in zip(indices_to_load, loaded_metadata)}
+                        id_to_meta = {l: meta for l, meta in zip(valid_labels, loaded_metadata)}
 
             filtered_labels = []
             filtered_distances = []
@@ -108,12 +117,21 @@ class VectorDB:
         with self.lock:
             self.index.delete(ids)
             self.storage.delete_vectors(ids)
+            # Rebuild mapping after deletion since positions change
+            all_ids = self.storage.load_ids()
+            self.id_to_pos = {int(v_id): i for i, v_id in enumerate(all_ids)}
 
     def update(self, ids, vectors):
         """Update vectors by ID (delete old, add new)."""
         # Lock is handled within delete and add, but we wrap here too for atomicity
         with self.lock:
             self.index.delete(ids)
-            ids = self.index.add(vectors, ids)
             self.storage.delete_vectors(ids)
-            self.storage.save_vectors(vectors, ids)
+            # Re-add with same IDs to ensure they are replaced in storage properly
+            # and update the in-memory mapping.
+            # We bypass self.add() here to avoid the uniqueness check on IDs we just deleted.
+            added_ids = self.index.add(vectors, ids)
+            self.storage.save_vectors(vectors, added_ids)
+            # Rebuild mapping after update since positions shift during deletion/append
+            all_ids = self.storage.load_ids()
+            self.id_to_pos = {int(v_id): i for i, v_id in enumerate(all_ids)}
