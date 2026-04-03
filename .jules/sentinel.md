@@ -111,3 +111,8 @@
 **Vulnerability:** Lack of rate limiting on failed authentication attempts allowed for potential API key brute-force attacks.
 **Learning:** Global authentication dependencies in FastAPI run before route-specific rate limit decorators. If authentication fails, the request is rejected before the standard rate limiter can track it, leaving the authentication mechanism unprotected from brute-force attempts.
 **Prevention:** Implement manual rate limiting within the authentication dependency using `limiter.limiter.hit()`. This ensures that even failed attempts are tracked and throttled, providing defense-in-depth for the API's entry point.
+
+## 2026-05-15 - [ID Collision & Metadata Alignment]
+**Vulnerability:** Cross-tenant data leakage and Denial-of-Service (DoS) via ID collisions and O(N) disk scans.
+**Learning:** Allowing duplicate IDs in the `/add` endpoint causes the indexing layer (HNSW) to store multiple vectors for the same ID, while the storage layer (HDF5) might only associate that ID with a single (latest) metadata entry. This leads to data leakage where vectors from different tenants sharing the same ID are returned together. Furthermore, performing metadata filtering by scanning the entire ID dataset from disk is an O(N) operation that creates a major DoS vector.
+**Prevention:** Enforce ID uniqueness at the application layer by maintaining an in-memory `id_to_pos` hash map. This allows for O(1) collision checks during additions and efficient indexed retrieval of metadata during searches, significantly improving both security and performance.

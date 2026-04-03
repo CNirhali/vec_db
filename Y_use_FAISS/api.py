@@ -327,7 +327,11 @@ def add_vectors(request: Request, req: AddRequest):
     # Security: Validate vector dimensions
     if vectors.shape[1] != db.dim:
         raise HTTPException(status_code=400, detail=f"Invalid vector dimension. Expected {db.dim}, got {vectors.shape[1]}")
-    db.add(vectors, req.ids, req.metadata)
+    try:
+        db.add(vectors, req.ids, req.metadata)
+    except ValueError as e:
+        # Security: Handle ID collisions and other value errors by returning a 400 Bad Request
+        raise HTTPException(status_code=400, detail=str(e))
     return {"status": "ok", "count": len(vectors)}
 
 @app.post("/search")
