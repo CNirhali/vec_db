@@ -116,3 +116,8 @@
 **Vulnerability:** Cross-tenant data leakage and Denial-of-Service (DoS) via ID collisions and O(N) disk scans.
 **Learning:** Allowing duplicate IDs in the `/add` endpoint causes the indexing layer (HNSW) to store multiple vectors for the same ID, while the storage layer (HDF5) might only associate that ID with a single (latest) metadata entry. This leads to data leakage where vectors from different tenants sharing the same ID are returned together. Furthermore, performing metadata filtering by scanning the entire ID dataset from disk is an O(N) operation that creates a major DoS vector.
 **Prevention:** Enforce ID uniqueness at the application layer by maintaining an in-memory `id_to_pos` hash map. This allows for O(1) collision checks during additions and efficient indexed retrieval of metadata during searches, significantly improving both security and performance.
+
+## 2026-04-10 - [Auth Token Depletion & Middleware Robustness]
+**Vulnerability:** Double consumption of rate-limit tokens and 500 errors via malformed HTTP headers.
+**Learning:** Sequential calls to `limiter.limiter.hit()` in a custom FastAPI dependency consume multiple tokens for a single request, causing rate limits to trigger twice as fast as intended. Furthermore, performing direct `int()` casting on user-controlled headers like `Content-Length` in global middleware can crash the request with a 500 error if the header is malformed (e.g., non-integer), which can be exploited for DoS or probing.
+**Prevention:** Consolidate manual rate-limiting calls into a single check. Always wrap header parsing logic in `try-except` blocks within middleware to ensure the application fails gracefully with a 400 Bad Request instead of a 500 Internal Server Error.
