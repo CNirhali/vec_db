@@ -40,11 +40,11 @@ def api_key_auth(request: Request, x_api_key: Optional[str] = Header(None)):
         client_ip = get_remote_address(request)
         logger.warning("auth_failed", client_ip=client_ip, reason="missing_or_invalid_key")
 
-        # Security: Implement brute-force protection using manual rate limiting for failed auth attempts
+        # Security: Implement brute-force protection using manual rate limiting for failed auth attempts.
+        # We call it once to avoid consuming multiple tokens for a single failed attempt.
         if not limiter.limiter.hit(AUTH_FAILURE_LIMIT, client_ip):
+            # Security: Throttling failed authentication attempts to mitigate brute-force risks
             logger.warning("auth_brute_force_detected", client_ip=client_ip)
-        # Security: Throttling failed authentication attempts to mitigate brute-force risks
-        if not limiter.limiter.hit(AUTH_FAILURE_LIMIT, client_ip):
             raise HTTPException(status_code=429, detail="Too many failed authentication attempts. Please try again later.")
 
         raise HTTPException(status_code=401, detail="Invalid or missing API Key")
@@ -87,11 +87,19 @@ async def runtime_error_handler(request: Request, exc: RuntimeError):
 async def add_security_headers(request: Request, call_next):
     # Security: Enforce request body size limit to prevent memory-based DoS
     content_length = request.headers.get("Content-Length")
-    if content_length and int(content_length) > MAX_REQUEST_BODY_SIZE:
-        return JSONResponse(
-            content={"detail": "Payload Too Large. Maximum allowed size is 150MB."},
-            status_code=413
-        )
+    if content_length:
+        try:
+            if int(content_length) > MAX_REQUEST_BODY_SIZE:
+                return JSONResponse(
+                    content={"detail": "Payload Too Large. Maximum allowed size is 150MB."},
+                    status_code=413
+                )
+        except ValueError:
+            # Security: Return 400 Bad Request for malformed Content-Length header
+            return JSONResponse(
+                content={"detail": "Invalid Content-Length header provided."},
+                status_code=400
+            )
 
     # Security: Defense-in-depth by adding security headers
     response = await call_next(request)
