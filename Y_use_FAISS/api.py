@@ -86,23 +86,27 @@ async def runtime_error_handler(request: Request, exc: RuntimeError):
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
     # Security: Enforce request body size limit to prevent memory-based DoS
-    content_length = request.headers.get("Content-Length")
-    if content_length:
+    raw_content_length = request.headers.get("Content-Length")
+    response = None
+    if raw_content_length:
         try:
-            if int(content_length) > MAX_REQUEST_BODY_SIZE:
-                return JSONResponse(
+            cl_int = int(raw_content_length)
+            if cl_int > MAX_REQUEST_BODY_SIZE:
+                response = JSONResponse(
                     content={"detail": "Payload Too Large. Maximum allowed size is 150MB."},
                     status_code=413
                 )
         except ValueError:
             # Security: Return 400 Bad Request for malformed Content-Length header
-            return JSONResponse(
+            response = JSONResponse(
                 content={"detail": "Invalid Content-Length header provided."},
                 status_code=400
             )
 
-    # Security: Defense-in-depth by adding security headers
-    response = await call_next(request)
+    if response is None:
+        response = await call_next(request)
+
+    # Security: Defense-in-depth by adding security headers to ALL responses, including early returns
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self'; object-src 'none';"
