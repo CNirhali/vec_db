@@ -121,3 +121,8 @@
 **Vulnerability:** Double consumption of rate-limit tokens and 500 errors via malformed HTTP headers.
 **Learning:** Sequential calls to `limiter.limiter.hit()` in a custom FastAPI dependency consume multiple tokens for a single request, causing rate limits to trigger twice as fast as intended. Furthermore, performing direct `int()` casting on user-controlled headers like `Content-Length` in global middleware can crash the request with a 500 error if the header is malformed (e.g., non-integer), which can be exploited for DoS or probing.
 **Prevention:** Consolidate manual rate-limiting calls into a single check. Always wrap header parsing logic in `try-except` blocks within middleware to ensure the application fails gracefully with a 400 Bad Request instead of a 500 Internal Server Error.
+
+## 2026-05-20 - [Hardened Headers & Early Response Bypass]
+**Vulnerability:** Browser-based attack vectors (XSS, Clickjacking, COOP) and potential request smuggling via negative Content-Length.
+**Learning:** Modern API security requires restrictive headers (strict CSP, COOP/CORP/COEP) even for non-browser clients to provide defense-in-depth. Furthermore, some ASGI servers (like Uvicorn/h11) might reject malformed headers (like negative Content-Length) before they reach application middleware; however, these "early" responses bypass custom middleware, meaning security headers are not applied to them.
+**Prevention:** Implement strict security headers in global middleware. Add application-level validation for sensitive headers like Content-Length as a secondary defense, but be aware that server-level rejections may bypass application-layer protections.

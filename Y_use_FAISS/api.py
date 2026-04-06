@@ -91,7 +91,13 @@ async def add_security_headers(request: Request, call_next):
     if raw_content_length:
         try:
             cl_int = int(raw_content_length)
-            if cl_int > MAX_REQUEST_BODY_SIZE:
+            # Security: Reject negative Content-Length to prevent potential server or future processing edge-case exploits
+            if cl_int < 0:
+                response = JSONResponse(
+                    content={"detail": "Invalid Content-Length header provided. Negative values are not allowed."},
+                    status_code=400
+                )
+            elif cl_int > MAX_REQUEST_BODY_SIZE:
                 response = JSONResponse(
                     content={"detail": "Payload Too Large. Maximum allowed size is 150MB."},
                     status_code=413
@@ -104,16 +110,26 @@ async def add_security_headers(request: Request, call_next):
             )
 
     if response is None:
+        # Correctly handle both sync and async endpoints
         response = await call_next(request)
 
-    # Security: Defense-in-depth by adding security headers to ALL responses, including early returns
+    # Security: Defense-in-depth by adding security headers to ALL responses, including early returns.
+    # We follow more restrictive modern standards for an API (minimizing attack surface).
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
-    response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self'; object-src 'none';"
-    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-    response.headers["X-XSS-Protection"] = "1; mode=block"
-    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    # Content-Security-Policy for API (strict 'none' defaults)
+    response.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none';"
+    # HSTS with includeSubDomains and preload
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"
+    # Modern recommendation is '0' instead of '1; mode=block'
+    response.headers["X-XSS-Protection"] = "0"
+    response.headers["Referrer-Policy"] = "no-referrer"
     response.headers["X-Permitted-Cross-Domain-Policies"] = "none"
+    # Additional modern security headers
+    response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
+    response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
+    response.headers["Cross-Origin-Embedder-Policy"] = "require-corp"
+    response.headers["Permissions-Policy"] = "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()"
     return response
 
 REQUEST_COUNT = Counter('vectordb_requests_total', 'Total API requests', ['endpoint', 'method'])

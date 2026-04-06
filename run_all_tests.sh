@@ -24,5 +24,6 @@ run_test test_concurrency.py
 run_test test_filter.py
 run_test test_rate_limiting.py
 run_test test_request_limit.py
+run_test test_new_security_protections.py
 
 echo "ALL TEST FILES PASSED"
