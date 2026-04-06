@@ -22,10 +22,10 @@ def test_security_headers_on_413():
     headers_to_check = {
         "X-Content-Type-Options": "nosniff",
         "X-Frame-Options": "DENY",
-        "Content-Security-Policy": "default-src 'self'; script-src 'self'; object-src 'none';",
-        "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
-        "X-XSS-Protection": "1; mode=block",
-        "Referrer-Policy": "strict-origin-when-cross-origin",
+        "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none';",
+        "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload",
+        "X-XSS-Protection": "0",
+        "Referrer-Policy": "no-referrer",
         "X-Permitted-Cross-Domain-Policies": "none"
     }
 
