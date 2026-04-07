@@ -126,3 +126,8 @@
 **Vulnerability:** Browser-based attack vectors (XSS, Clickjacking, COOP) and potential request smuggling via negative Content-Length.
 **Learning:** Modern API security requires restrictive headers (strict CSP, COOP/CORP/COEP) even for non-browser clients to provide defense-in-depth. Furthermore, some ASGI servers (like Uvicorn/h11) might reject malformed headers (like negative Content-Length) before they reach application middleware; however, these "early" responses bypass custom middleware, meaning security headers are not applied to them.
 **Prevention:** Implement strict security headers in global middleware. Add application-level validation for sensitive headers like Content-Length as a secondary defense, but be aware that server-level rejections may bypass application-layer protections.
+
+## 2026-04-07 - [Non-Finite Float Serialization DoS]
+**Vulnerability:** Denial-of-Service (DoS) via 500 Internal Server Errors caused by non-finite floating-point values (NaN, Inf) in API responses.
+**Learning:** Standard JSON (RFC 7159) does not support `NaN` or `Infinity`. When libraries like FAISS/hnswlib return extreme distances that overflow to `inf`, attempting to serialize these in a standard FastAPI/JSON response causes a `ValueError` and a 500 crash.
+**Prevention:** Implement a custom JSON encoder and response class that recursively replaces non-finite float values with `null` (or another safe placeholder) during serialization. This ensures the API remains available even when numerical edge cases occur in the underlying engine.
