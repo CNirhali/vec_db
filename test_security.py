@@ -68,7 +68,7 @@ def test_dos_k_parameter():
     }
     headers = {"X-API-Key": API_KEY}
     # Need to init first
-    requests.post(f"{BASE_URL}/init", json={"dim": 128, "storage_path": "test.h5"}, headers=headers)
+    requests.post(f"{BASE_URL}/init", json={"dim": 128, "storage_path": "test_dos_k.h5"}, headers=headers)
     response = requests.post(f"{BASE_URL}/search", json=data, headers=headers)
     print(f"Search with k=1000000: {response.status_code} {response.text}")
     assert response.status_code == 422
@@ -418,6 +418,27 @@ def test_docs_disabled():
         # When disabled in FastAPI, these should return 404
         assert resp.status_code == 404
 
+def test_inf_distance_serialization():
+    # Security: Ensure infinite distances in search results don't cause 500 errors
+    headers = {"X-API-Key": API_KEY}
+    # Use the same dimension as established by previous tests to avoid 400 dimension mismatch
+    dim = 128
+    # Clear any previous state by using a new filename or re-init
+    requests.post(f"{BASE_URL}/init", json={"dim": dim, "storage_path": "test_inf_ser_new.h5"}, headers=headers)
+
+    # Add two vectors very far apart to trigger infinite distance in float32
+    # But still finite enough to be accepted by the /add validation
+    v1 = [1.7e38] * dim
+    v2 = [-1.7e38] * dim
+    requests.post(f"{BASE_URL}/add", json={"vectors": [v1], "ids": [1]}, headers=headers)
+
+    # Search for v1 using v2 as query
+    response = requests.post(f"{BASE_URL}/search", json={"queries": [v2], "k": 1}, headers=headers)
+    assert response.status_code == 200
+    # The infinite distance should have been converted to null (None)
+    data = response.json()
+    assert data["distances"][0][0] is None
+
 if __name__ == "__main__":
     test_metrics_protected()
     test_status_protected()
@@ -440,4 +461,5 @@ if __name__ == "__main__":
     test_storage_path_regex()
     test_search_result_limit()
     test_docs_disabled()
+    test_inf_distance_serialization()
     print("ALL TESTS PASSED")

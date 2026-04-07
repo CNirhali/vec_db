@@ -18,6 +18,32 @@ import structlog
 from prometheus_client import Counter, Histogram, generate_latest
 from fastapi.responses import Response, JSONResponse
 
+# Security: Custom JSON Encoder to safely handle non-finite float values (NaN, Inf)
+# Standard JSON does not support these, and they cause 500 errors during serialization.
+class SafeJSONEncoder(json.JSONEncoder):
+    def encode(self, obj):
+        def replace_non_finite(o):
+            if isinstance(o, float):
+                if not np.isfinite(o):
+                    return None
+            elif isinstance(o, dict):
+                return {k: replace_non_finite(v) for k, v in o.items()}
+            elif isinstance(o, (list, tuple)):
+                return [replace_non_finite(v) for v in o]
+            return o
+        return super().encode(replace_non_finite(obj))
+
+class SafeJSONResponse(JSONResponse):
+    def render(self, content: Any) -> bytes:
+        return json.dumps(
+            content,
+            ensure_ascii=False,
+            allow_nan=False,
+            indent=None,
+            separators=(",", ":"),
+            cls=SafeJSONEncoder,
+        ).encode("utf-8")
+
 # Security: Load API Key from environment variable, default for dev
 API_KEY = os.getenv("API_KEY", "supersecretkey")
 
@@ -374,7 +400,11 @@ def search_vectors(request: Request, req: SearchRequest):
         # Security: Return 400 instead of 500 when queries are inhomogeneous
         raise HTTPException(status_code=400, detail=f"Invalid queries. Ensure all queries have the same dimension. Error: {str(e)}")
 
-    # Security: Reject non-finite values (NaN, Inf) to prevent 500 Internal Server Error during JSON serialization
+    # Security: Allow non-finite values in queries if they occur, SafeJSONResponse will handle them.
+    # However, input validation for queries should still probably catch them to be safe.
+    # We will keep it but only for Add, not necessarily for Search if we want to allow extreme searches.
+    # Wait, if they are in queries, it's probably better to reject them as they don't make sense for distance calculation.
+    # But if distance calculation ITSELF results in Inf, that's what we want to handle.
     if not np.isfinite(queries).all():
         raise HTTPException(status_code=400, detail="Queries contain non-finite values (NaN or Infinity)")
 
@@ -383,7 +413,8 @@ def search_vectors(request: Request, req: SearchRequest):
         raise HTTPException(status_code=400, detail=f"Invalid query dimension. Expected {db.dim}, got {queries.shape[1]}")
     labels, distances = db.search(queries, req.k, filter_metadata=req.filter_metadata)
     # Convert numpy types to native Python types for JSON serialization
-    return {"labels": labels.tolist(), "distances": distances.tolist()}
+    # Security: Use SafeJSONResponse to handle potential non-finite values (NaN, Inf) in distances
+    return SafeJSONResponse({"labels": labels.tolist(), "distances": distances.tolist()})
 
 @app.post("/delete")
 @limiter.limit("100/minute")
