@@ -131,3 +131,8 @@
 **Vulnerability:** Denial-of-Service (DoS) via 500 Internal Server Errors caused by non-finite floating-point values (NaN, Inf) in API responses.
 **Learning:** Standard JSON (RFC 7159) does not support `NaN` or `Infinity`. When libraries like FAISS/hnswlib return extreme distances that overflow to `inf`, attempting to serialize these in a standard FastAPI/JSON response causes a `ValueError` and a 500 crash.
 **Prevention:** Implement a custom JSON encoder and response class that recursively replaces non-finite float values with `null` (or another safe placeholder) during serialization. This ensures the API remains available even when numerical edge cases occur in the underlying engine.
+
+## 2026-04-08 - [RecursionError DoS in JSON Encoding]
+**Vulnerability:** Denial-of-Service (DoS) via RecursionError triggered by deeply nested metadata during JSON serialization.
+**Learning:** Custom JSON encoders that use recursive functions to preprocess objects (e.g., to handle non-finite floats or numpy types) are vulnerable to stack exhaustion if an attacker provides metadata with excessive nesting depth. While size-based limits (e.g., 10KB) are important, they do not inherently prevent recursion depth issues.
+**Prevention:** Use an iterative approach with an explicit stack and a maximum depth limit for all object-traversal logic in security-sensitive components like JSON encoders.
