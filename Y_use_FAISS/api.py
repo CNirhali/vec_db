@@ -22,16 +22,54 @@ from fastapi.responses import Response, JSONResponse
 # Standard JSON does not support these, and they cause 500 errors during serialization.
 class SafeJSONEncoder(json.JSONEncoder):
     def encode(self, obj):
-        def replace_non_finite(o):
-            if isinstance(o, float):
-                if not np.isfinite(o):
-                    return None
-            elif isinstance(o, dict):
-                return {k: replace_non_finite(v) for k, v in o.items()}
-            elif isinstance(o, (list, tuple)):
-                return [replace_non_finite(v) for v in o]
-            return o
-        return super().encode(replace_non_finite(obj))
+        # Security: Iterative implementation to prevent RecursionError DoS
+        def iterative_replace(root):
+            # Base cases for non-containers or already converted numpy floats
+            if isinstance(root, (float, np.floating)):
+                return None if not np.isfinite(root) else float(root)
+            if not isinstance(root, (dict, list, tuple)):
+                # Handle other numpy types if necessary, though .tolist() is usually called
+                if isinstance(root, np.integer):
+                    return int(root)
+                return root
+
+            # For containers, we build a new structure iteratively
+            res = {} if isinstance(root, dict) else []
+            # stack stores (original_obj, copy_obj, depth)
+            stack = [(root, res, 0)]
+            MAX_DEPTH = 20 # Security: Max depth limit to prevent deep nesting DoS
+
+            while stack:
+                curr_orig, curr_copy, depth = stack.pop()
+                if depth >= MAX_DEPTH:
+                    continue
+
+                if isinstance(curr_orig, dict):
+                    for k, v in curr_orig.items():
+                        if isinstance(v, (float, np.floating)):
+                            curr_copy[k] = None if not np.isfinite(v) else float(v)
+                        elif isinstance(v, (dict, list, tuple)):
+                            new_v = {} if isinstance(v, dict) else []
+                            curr_copy[k] = new_v
+                            stack.append((v, new_v, depth + 1))
+                        elif isinstance(v, np.integer):
+                            curr_copy[k] = int(v)
+                        else:
+                            curr_copy[k] = v
+                else: # list or tuple
+                    for v in curr_orig:
+                        if isinstance(v, (float, np.floating)):
+                            curr_copy.append(None if not np.isfinite(v) else float(v))
+                        elif isinstance(v, (dict, list, tuple)):
+                            new_v = {} if isinstance(v, dict) else []
+                            curr_copy.append(new_v)
+                            stack.append((v, new_v, depth + 1))
+                        elif isinstance(v, np.integer):
+                            curr_copy.append(int(v))
+                        else:
+                            curr_copy.append(v)
+            return res
+        return super().encode(iterative_replace(obj))
 
 class SafeJSONResponse(JSONResponse):
     def render(self, content: Any) -> bytes:
@@ -448,7 +486,7 @@ def update_vectors(request: Request, req: UpdateRequest):
     return {"status": "ok", "updated": len(req.ids)}
 
 @app.post("/save")
-@limiter.limit("100/minute")
+@limiter.limit("10/minute")
 @instrument("/save")
 def save_db(request: Request):
     if db is None:
