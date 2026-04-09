@@ -136,3 +136,8 @@
 **Vulnerability:** Denial-of-Service (DoS) via RecursionError triggered by deeply nested metadata during JSON serialization.
 **Learning:** Custom JSON encoders that use recursive functions to preprocess objects (e.g., to handle non-finite floats or numpy types) are vulnerable to stack exhaustion if an attacker provides metadata with excessive nesting depth. While size-based limits (e.g., 10KB) are important, they do not inherently prevent recursion depth issues.
 **Prevention:** Use an iterative approach with an explicit stack and a maximum depth limit for all object-traversal logic in security-sensitive components like JSON encoders.
+
+## 2026-04-09 - [Recursion-based DoS in Metadata Validation]
+**Vulnerability:** Deeply nested JSON metadata can trigger `RecursionError` during Pydantic validation or FastAPI error reporting, leading to a 500 Internal Server Error (DoS).
+**Learning:** Standard JSON validation and error reporting in FastAPI/Pydantic use recursive functions that are vulnerable to stack exhaustion if user input exceeds `sys.getrecursionlimit()`. Size-based limits are insufficient to prevent depth-based recursion issues. Furthermore, the error reporting mechanism itself can crash if it attempts to serialize the offending deeply nested object.
+**Prevention:** Implement iterative (stack-based) depth checking for all user-provided nested structures. Use custom exception handlers to safely catch and report errors that might otherwise trigger recursion during serialization.

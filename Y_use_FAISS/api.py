@@ -1,4 +1,6 @@
 from fastapi import FastAPI, HTTPException, Header, Depends, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.encoders import jsonable_encoder
 from fastapi.concurrency import run_in_threadpool
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -82,6 +84,20 @@ class SafeJSONResponse(JSONResponse):
             cls=SafeJSONEncoder,
         ).encode("utf-8")
 
+def check_depth(obj: Any, max_depth: int = 20) -> None:
+    """Security: Iteratively check object depth to prevent RecursionError DoS."""
+    stack = [(obj, 0)]
+    while stack:
+        curr, depth = stack.pop()
+        if depth > max_depth:
+            raise ValueError(f"Object nesting depth exceeds limit of {max_depth}")
+        if isinstance(curr, dict):
+            for v in curr.values():
+                stack.append((v, depth + 1))
+        elif isinstance(curr, (list, tuple)):
+            for v in curr:
+                stack.append((v, depth + 1))
+
 # Security: Load API Key from environment variable, default for dev
 API_KEY = os.getenv("API_KEY", "supersecretkey")
 
@@ -146,6 +162,19 @@ async def runtime_error_handler(request: Request, exc: RuntimeError):
         content={"detail": "An internal indexing error occurred. The operation could not be completed securely."},
         status_code=500
     )
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    # Security: Iteratively encode validation errors to prevent RecursionError DoS
+    # when the error context itself contains deeply nested data that triggered the failure.
+    try:
+        content = {"detail": jsonable_encoder(exc.errors())}
+    except RecursionError:
+        # Fallback to a safe message if encoding fails due to recursion
+        content = {"detail": [{"loc": ["body"], "msg": "Maximum recursion depth exceeded during validation", "type": "value_error"}]}
+
+    logger.error("validation_error", path=request.url.path)
+    return JSONResponse(content=content, status_code=422)
 
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
@@ -254,6 +283,8 @@ class AddRequest(BaseModel):
         if v is None:
             return v
         for entry in v:
+            # Security: Check depth to prevent RecursionError DoS
+            check_depth(entry)
             if len(entry) > 100:
                 raise ValueError("Metadata entry exceeds limit of 100 keys")
             if len(json.dumps(entry)) > 10240:
@@ -307,6 +338,8 @@ class SearchRequest(BaseModel):
         # Security: Limit filter metadata size and key count to prevent DoS
         if v is None:
             return v
+        # Security: Check depth to prevent RecursionError DoS
+        check_depth(v)
         if len(v) > 100:
             raise ValueError("Filter metadata exceeds limit of 100 keys")
         if len(json.dumps(v)) > 10240:
