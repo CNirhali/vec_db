@@ -61,8 +61,10 @@ class VectorDB:
 
     def search(self, queries, k=10, filter_metadata=None):
         """Search for k nearest neighbors for each query vector, optionally filter by metadata."""
+        # Security: Pass the actual number of active elements to correctly cap k and avoid crashes.
+        active_count = len(self.id_to_pos)
         # Index search in hnswlib is thread-safe for reading
-        labels, distances = self.index.search(queries, k)
+        labels, distances = self.index.search(queries, k, active_count=active_count)
         if filter_metadata is not None:
             # Security: Optimize memory usage by only loading metadata for the ANN-returned results.
             # Using self.id_to_pos avoids O(N) disk scans or large vectorized operations on all IDs, mitigating a major DoS vector.

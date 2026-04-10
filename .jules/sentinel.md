@@ -141,3 +141,8 @@
 **Vulnerability:** Deeply nested JSON metadata can trigger `RecursionError` during Pydantic validation or FastAPI error reporting, leading to a 500 Internal Server Error (DoS).
 **Learning:** Standard JSON validation and error reporting in FastAPI/Pydantic use recursive functions that are vulnerable to stack exhaustion if user input exceeds `sys.getrecursionlimit()`. Size-based limits are insufficient to prevent depth-based recursion issues. Furthermore, the error reporting mechanism itself can crash if it attempts to serialize the offending deeply nested object.
 **Prevention:** Implement iterative (stack-based) depth checking for all user-provided nested structures. Use custom exception handlers to safely catch and report errors that might otherwise trigger recursion during serialization.
+
+## 2026-04-10 - [HNSW Deleted Label DoS]
+**Vulnerability:** Denial-of-Service (DoS) via 500 Internal Server Error when searching with `k` greater than the number of active elements.
+**Learning:** In `hnswlib`, `get_current_count()` includes elements marked as deleted but not yet physically removed. If `knn_query` is called with a `k` value that is less than or equal to `get_current_count()` but greater than the number of *active* elements, it raises a `RuntimeError` ("Cannot return the results in a contiguous 2D array").
+**Prevention:** Always cap the requested `k` by the actual number of non-deleted (active) elements. Maintain an accurate in-memory count of active IDs and use it to validate or cap search parameters before calling the underlying indexing library.
