@@ -38,7 +38,7 @@ class HNSWIndex:
             self.max_id = max(self.max_id, int(np.max(ids)))
         return ids
 
-    def search(self, queries, k=10):
+    def search(self, queries, k=10, active_count=None):
         """Search for k nearest neighbors for each query vector."""
         if not self.initialized:
             # Security: If index is not initialized, return empty results to prevent DoS crash (hnswlib knn_query on uninitialized index)
@@ -52,8 +52,15 @@ class HNSWIndex:
             num_queries = queries.shape[0]
             return np.zeros((num_queries, 0), dtype=np.int64), np.zeros((num_queries, 0), dtype=np.float32)
 
-        # Security: Cap k to prevent RuntimeError in hnswlib when k > current_count
-        k = min(k, current_count)
+        # Security: Cap k to prevent RuntimeError in hnswlib when k > active_count.
+        # hnswlib's get_current_count includes deleted elements.
+        # Capping by active_count (if provided) is more accurate to avoid crashes.
+        limit = active_count if active_count is not None else current_count
+        k = min(k, limit)
+
+        if k <= 0:
+            num_queries = queries.shape[0]
+            return np.zeros((num_queries, 0), dtype=np.int64), np.zeros((num_queries, 0), dtype=np.float32)
 
         self.index.set_ef(self.ef_search)
         return self.index.knn_query(queries, k=k)
